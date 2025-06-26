@@ -41,7 +41,7 @@ const loginSchema = z.object({
 const registerSchema = insertUserSchema
   .extend({
     confirmPassword: z.string().min(6, "Password must be at least 6 characters"),
-    isServiceProvider: z.boolean().default(false),
+    role: z.string().default("client"),
     // Provider-specific fields
     categoryId: z.string().optional(),
     hourlyRate: z.string().optional(),
@@ -55,7 +55,7 @@ const registerSchema = insertUserSchema
   })
   .refine(
     (data) => {
-      if (data.isServiceProvider) {
+      if (data.role === "service_provider") {
         return !!data.categoryId && !!data.hourlyRate;
       }
       return true;
@@ -106,7 +106,7 @@ export default function AuthPage({ isModal = false, onClose, defaultToProvider =
       confirmPassword: "",
       firstName: "",
       lastName: "",
-      isServiceProvider: defaultToProvider,
+      role: defaultToProvider ? "service_provider" : "client",
       categoryId: "",
       hourlyRate: "",
       bio: "",
@@ -127,14 +127,14 @@ export default function AuthPage({ isModal = false, onClose, defaultToProvider =
     
     registerMutation.mutate({
       ...userFields,
-      isServiceProvider: accountType === "provider",
+      role: accountType === "provider" ? "service_provider" : "client",
     });
   }
 
   // Handle account type change
   const handleAccountTypeChange = (value: string) => {
     setAccountType(value);
-    registerForm.setValue("isServiceProvider", value === "provider");
+    registerForm.setValue("role", value === "provider" ? "service_provider" : "client");
   };
 
   // If user is already logged in and this is not a modal, redirect to home
@@ -373,7 +373,7 @@ export default function AuthPage({ isModal = false, onClose, defaultToProvider =
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {categories?.map((category: any) => (
+                            {(categories || []).map((category: any) => (
                               <SelectItem
                                 key={category.id}
                                 value={category.id.toString()}

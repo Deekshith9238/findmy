@@ -4,7 +4,9 @@ import {
   serviceProviders, type ServiceProvider, type InsertServiceProvider,
   tasks, type Task, type InsertTask,
   serviceRequests, type ServiceRequest, type InsertServiceRequest,
-  reviews, type Review, type InsertReview
+  reviews, type Review, type InsertReview,
+  serviceProviderDocuments, type ServiceProviderDocument, type InsertServiceProviderDocument,
+  callCenterAssignments, type CallCenterAssignment, type InsertCallCenterAssignment
 } from "@shared/schema";
 import session from "express-session";
 import createMemoryStore from "memorystore";
@@ -56,6 +58,16 @@ export interface IStorage {
   createReview(review: InsertReview): Promise<Review>;
   getReviewsByProvider(providerId: number): Promise<Review[]>;
   
+  // Service Provider Document methods
+  createServiceProviderDocument(document: InsertServiceProviderDocument): Promise<ServiceProviderDocument>;
+  getServiceProviderDocuments(providerId: number): Promise<ServiceProviderDocument[]>;
+  updateServiceProviderDocument(id: number, document: Partial<ServiceProviderDocument>): Promise<ServiceProviderDocument | undefined>;
+  
+  // Call Center Assignment methods
+  createCallCenterAssignment(assignment: InsertCallCenterAssignment): Promise<CallCenterAssignment>;
+  getCallCenterAssignments(callCenterUserId: number): Promise<CallCenterAssignment[]>;
+  updateCallCenterAssignment(id: number, assignment: Partial<CallCenterAssignment>): Promise<CallCenterAssignment | undefined>;
+  
   // Session store
   sessionStore: session.Store;
 }
@@ -67,6 +79,8 @@ export class MemStorage implements IStorage {
   private tasks: Map<number, Task>;
   private serviceRequests: Map<number, ServiceRequest>;
   private reviews: Map<number, Review>;
+  private serviceProviderDocuments: Map<number, ServiceProviderDocument>;
+  private callCenterAssignments: Map<number, CallCenterAssignment>;
   
   sessionStore: session.Store;
   currentId: { [key: string]: number };
@@ -78,6 +92,8 @@ export class MemStorage implements IStorage {
     this.tasks = new Map();
     this.serviceRequests = new Map();
     this.reviews = new Map();
+    this.serviceProviderDocuments = new Map();
+    this.callCenterAssignments = new Map();
     
     this.currentId = {
       users: 1,
@@ -85,7 +101,9 @@ export class MemStorage implements IStorage {
       serviceProviders: 1,
       tasks: 1,
       serviceRequests: 1,
-      reviews: 1
+      reviews: 1,
+      serviceProviderDocuments: 1,
+      callCenterAssignments: 1
     };
     
     this.sessionStore = new MemoryStore({
@@ -136,9 +154,11 @@ export class MemStorage implements IStorage {
       ...insertUser, 
       id, 
       createdAt, 
-      isServiceProvider: insertUser.isServiceProvider || false,
+      updatedAt: createdAt,
+      role: insertUser.role || "client",
       profilePicture: insertUser.profilePicture || null,
-      phoneNumber: insertUser.phoneNumber || null
+      phoneNumber: insertUser.phoneNumber || null,
+      isActive: insertUser.isActive ?? true
     };
     this.users.set(id, user);
     return user;
@@ -177,6 +197,7 @@ export class MemStorage implements IStorage {
   // Service Provider methods
   async createServiceProvider(provider: InsertServiceProvider): Promise<ServiceProvider> {
     const id = this.currentId.serviceProviders++;
+    const createdAt = new Date();
     const newProvider: ServiceProvider = { 
       ...provider, 
       id, 
@@ -184,7 +205,13 @@ export class MemStorage implements IStorage {
       completedJobs: 0,
       bio: provider.bio || null,
       yearsOfExperience: provider.yearsOfExperience || null,
-      availability: provider.availability || null
+      availability: provider.availability || null,
+      createdAt,
+      updatedAt: createdAt,
+      verificationStatus: provider.verificationStatus || "pending",
+      verifiedAt: null,
+      verifiedBy: null,
+      rejectionReason: null
     };
     this.serviceProviders.set(id, newProvider);
     return newProvider;
@@ -288,9 +315,17 @@ export class MemStorage implements IStorage {
       ...request, 
       id, 
       createdAt,
-      status: request.status || "pending", // ensure status is always defined
-      message: request.message !== undefined ? request.message : null,
-      taskId: request.taskId !== undefined ? request.taskId : null
+      updatedAt: createdAt,
+      status: request.status || "pending",
+      budget: request.budget || null,
+      providerId: request.providerId || null,
+      message: request.message || null,
+      assignedToCallCenter: request.assignedToCallCenter || null,
+      scheduledDate: request.scheduledDate || null,
+      callNotes: request.callNotes || null,
+      taskId: request.taskId || null,
+      assignedAt: null,
+      contactedAt: null
     };
     this.serviceRequests.set(id, newRequest);
     return newRequest;
@@ -353,6 +388,71 @@ export class MemStorage implements IStorage {
     return Array.from(this.reviews.values()).filter(
       (review) => review.providerId === providerId
     );
+  }
+
+  // Service Provider Document methods
+  async createServiceProviderDocument(document: InsertServiceProviderDocument): Promise<ServiceProviderDocument> {
+    const id = this.currentId.serviceProviderDocuments++;
+    const newDocument: ServiceProviderDocument = { 
+      id, 
+      ...document,
+      verificationStatus: document.verificationStatus || "pending",
+      uploadedAt: new Date(),
+      verifiedAt: null,
+      verifiedBy: null,
+      notes: document.notes || null
+    };
+    this.serviceProviderDocuments.set(id, newDocument);
+    return newDocument;
+  }
+
+  async getServiceProviderDocuments(providerId: number): Promise<ServiceProviderDocument[]> {
+    return Array.from(this.serviceProviderDocuments.values()).filter(
+      (document) => document.providerId === providerId
+    );
+  }
+
+  async updateServiceProviderDocument(id: number, documentData: Partial<ServiceProviderDocument>): Promise<ServiceProviderDocument | undefined> {
+    const document = this.serviceProviderDocuments.get(id);
+    if (document) {
+      const updatedDocument = { ...document, ...documentData, updatedAt: new Date() };
+      this.serviceProviderDocuments.set(id, updatedDocument);
+      return updatedDocument;
+    }
+    return undefined;
+  }
+
+  // Call Center Assignment methods
+  async createCallCenterAssignment(assignment: InsertCallCenterAssignment): Promise<CallCenterAssignment> {
+    const id = this.currentId.callCenterAssignments++;
+    const newAssignment: CallCenterAssignment = { 
+      id, 
+      ...assignment,
+      status: assignment.status || "assigned",
+      assignedAt: new Date(),
+      completedAt: null,
+      attempts: assignment.attempts || 0,
+      lastAttemptAt: null,
+      notes: assignment.notes || null
+    };
+    this.callCenterAssignments.set(id, newAssignment);
+    return newAssignment;
+  }
+
+  async getCallCenterAssignments(callCenterUserId: number): Promise<CallCenterAssignment[]> {
+    return Array.from(this.callCenterAssignments.values()).filter(
+      (assignment) => assignment.callCenterUserId === callCenterUserId
+    );
+  }
+
+  async updateCallCenterAssignment(id: number, assignmentData: Partial<CallCenterAssignment>): Promise<CallCenterAssignment | undefined> {
+    const assignment = this.callCenterAssignments.get(id);
+    if (assignment) {
+      const updatedAssignment = { ...assignment, ...assignmentData, updatedAt: new Date() };
+      this.callCenterAssignments.set(id, updatedAssignment);
+      return updatedAssignment;
+    }
+    return undefined;
   }
 }
 
@@ -586,6 +686,44 @@ export class DatabaseStorage implements IStorage {
 
   async getReviewsByProvider(providerId: number): Promise<Review[]> {
     return db.select().from(reviews).where(eq(reviews.providerId, providerId));
+  }
+
+  // Service Provider Document methods
+  async createServiceProviderDocument(document: InsertServiceProviderDocument): Promise<ServiceProviderDocument> {
+    const [newDocument] = await db.insert(serviceProviderDocuments).values(document).returning();
+    return newDocument;
+  }
+
+  async getServiceProviderDocuments(providerId: number): Promise<ServiceProviderDocument[]> {
+    return db.select().from(serviceProviderDocuments).where(eq(serviceProviderDocuments.providerId, providerId));
+  }
+
+  async updateServiceProviderDocument(id: number, documentData: Partial<ServiceProviderDocument>): Promise<ServiceProviderDocument | undefined> {
+    const [document] = await db.update(serviceProviderDocuments)
+      .set(documentData)
+      .where(eq(serviceProviderDocuments.id, id))
+      .returning();
+    
+    return document;
+  }
+
+  // Call Center Assignment methods
+  async createCallCenterAssignment(assignment: InsertCallCenterAssignment): Promise<CallCenterAssignment> {
+    const [newAssignment] = await db.insert(callCenterAssignments).values(assignment).returning();
+    return newAssignment;
+  }
+
+  async getCallCenterAssignments(callCenterUserId: number): Promise<CallCenterAssignment[]> {
+    return db.select().from(callCenterAssignments).where(eq(callCenterAssignments.callCenterUserId, callCenterUserId));
+  }
+
+  async updateCallCenterAssignment(id: number, assignmentData: Partial<CallCenterAssignment>): Promise<CallCenterAssignment | undefined> {
+    const [assignment] = await db.update(callCenterAssignments)
+      .set(assignmentData)
+      .where(eq(callCenterAssignments.id, id))
+      .returning();
+    
+    return assignment;
   }
 }
 

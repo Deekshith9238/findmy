@@ -213,7 +213,7 @@ export default function HomePage() {
             <h2 className="text-2xl md:text-4xl font-bold mb-4">Earn money doing what you love</h2>
             <p className="text-xl opacity-90 mb-8">Join our community of service providers and connect with clients in your area.</p>
             {user ? (
-              user.isServiceProvider ? (
+              user.role === "service_provider" ? (
                 <Link href="/provider-dashboard">
                   <Button variant="secondary" className="px-8 py-4 h-auto bg-white text-primary hover:bg-neutral-100">
                     Go to your dashboard

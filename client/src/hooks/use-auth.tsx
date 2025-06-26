@@ -17,6 +17,9 @@ type AuthContextType = {
   logoutMutation: UseMutationResult<void, Error, void>;
   registerMutation: UseMutationResult<SelectUser, Error, InsertUser>;
   isProvider: boolean;
+  isAdmin: boolean;
+  isServiceVerifier: boolean;
+  isCallCenter: boolean;
 };
 
 type LoginData = {
@@ -52,7 +55,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       
       // Redirect based on user type
-      if (user.isServiceProvider) {
+      if (user.role === "service_provider") {
         setLocation("/provider-dashboard");
       } else {
         setLocation("/client-dashboard");
@@ -91,7 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       
       // Redirect based on user type
-      if (data.isServiceProvider) {
+      if (data.role === "service_provider") {
         setLocation("/provider-dashboard");
       } else {
         setLocation("/client-dashboard");
@@ -136,7 +139,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loginMutation,
         logoutMutation,
         registerMutation,
-        isProvider: user?.isServiceProvider || false,
+        isProvider: user?.role === "service_provider" || false,
+        isAdmin: user?.role === "admin" || false,
+        isServiceVerifier: user?.role === "service_verifier" || false,
+        isCallCenter: user?.role === "call_center" || false,
       }}
     >
       {children}
