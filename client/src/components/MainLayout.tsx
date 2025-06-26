@@ -18,7 +18,7 @@ interface MainLayoutProps {
 
 export default function MainLayout({ children }: MainLayoutProps) {
   const [location] = useLocation();
-  const { user, logoutMutation, isProvider } = useAuth();
+  const { user, logoutMutation, isProvider, isAdmin } = useAuth();
   const [authDialogOpen, setAuthDialogOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -52,7 +52,11 @@ export default function MainLayout({ children }: MainLayoutProps) {
             </Link>
             {user && (
               <>
-                {isProvider ? (
+                {isAdmin ? (
+                  <Link href="/admin-dashboard" className="font-medium hover:text-primary transition-colors">
+                    Admin Dashboard
+                  </Link>
+                ) : isProvider ? (
                   <Link href="/provider-dashboard" className="font-medium hover:text-primary transition-colors">
                     Dashboard
                   </Link>
@@ -122,7 +126,11 @@ export default function MainLayout({ children }: MainLayoutProps) {
                   
                   {user ? (
                     <>
-                      {isProvider ? (
+                      {isAdmin ? (
+                        <Link href="/admin-dashboard" className="font-medium hover:text-primary transition-colors" onClick={() => setMobileMenuOpen(false)}>
+                          Admin Dashboard
+                        </Link>
+                      ) : isProvider ? (
                         <Link href="/provider-dashboard" className="font-medium hover:text-primary transition-colors" onClick={() => setMobileMenuOpen(false)}>
                           Dashboard
                         </Link>

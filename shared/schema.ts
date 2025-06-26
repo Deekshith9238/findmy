@@ -24,6 +24,7 @@ export const users = pgTable("users", {
   profilePicture: text("profile_picture"),
   phoneNumber: text("phone_number"),
   isActive: boolean("is_active").notNull().default(true),
+  createdBy: integer("created_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

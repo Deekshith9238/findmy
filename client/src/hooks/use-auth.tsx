@@ -20,6 +20,7 @@ type AuthContextType = {
   isAdmin: boolean;
   isServiceVerifier: boolean;
   isCallCenter: boolean;
+  canCreateRoles: boolean;
 };
 
 type LoginData = {
@@ -140,9 +141,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         logoutMutation,
         registerMutation,
         isProvider: user?.role === "service_provider" || false,
-        isAdmin: user?.role === "admin" || false,
+        isAdmin: user?.email === "findmyhelper2025@gmail.com" || false,
         isServiceVerifier: user?.role === "service_verifier" || false,
         isCallCenter: user?.role === "call_center" || false,
+        canCreateRoles: user?.email === "findmyhelper2025@gmail.com" || false,
       }}
     >
       {children}

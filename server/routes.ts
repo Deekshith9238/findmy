@@ -6,8 +6,10 @@ import { z } from "zod";
 import { 
   insertTaskSchema, 
   insertServiceRequestSchema,
-  insertReviewSchema
+  insertReviewSchema,
+  insertUserSchema
 } from "@shared/schema";
+import type { Request, Response, NextFunction } from "express";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Set up authentication routes
@@ -443,6 +445,117 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       res.status(500).json({ message: "Failed to create review" });
+    }
+  });
+
+  // Admin middleware
+  const requireAdmin = (req: any, res: Response, next: NextFunction) => {
+    if (!req.user || req.user.email !== 'findmyhelper2025@gmail.com') {
+      return res.status(403).json({ message: 'Admin access required' });
+    }
+    next();
+  };
+
+  // Admin routes
+  app.get('/api/admin/staff', async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+    
+    if (req.user.email !== 'findmyhelper2025@gmail.com') {
+      return res.status(403).json({ message: 'Admin access required' });
+    }
+    
+    try {
+      const staffUsers = await storage.getStaffUsers();
+      res.json(staffUsers);
+    } catch (error) {
+      console.error('Error fetching staff users:', error);
+      res.status(500).json({ message: 'Failed to fetch staff users' });
+    }
+  });
+
+  app.post('/api/admin/create-user', async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+    
+    if (req.user.email !== 'findmyhelper2025@gmail.com') {
+      return res.status(403).json({ message: 'Admin access required' });
+    }
+    
+    try {
+      const validatedData = insertUserSchema.parse(req.body);
+      
+      // Check if username or email already exists
+      const existingUser = await storage.getUserByUsername(validatedData.username) || 
+                          await storage.getUserByEmail(validatedData.email);
+      
+      if (existingUser) {
+        return res.status(400).json({ message: 'Username or email already exists' });
+      }
+
+      // Only allow creating service_verifier and call_center roles
+      if (!['service_verifier', 'call_center'].includes(validatedData.role)) {
+        return res.status(400).json({ message: 'Invalid role specified' });
+      }
+
+      // Set createdBy to admin user ID
+      const userWithCreator = {
+        ...validatedData,
+        createdBy: req.user.id
+      };
+
+      const user = await storage.createUser(userWithCreator);
+      
+      // Remove password from response
+      const { password, ...userResponse } = user;
+      res.status(201).json(userResponse);
+    } catch (error: any) {
+      console.error('Error creating user:', error);
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ message: 'Invalid user data', errors: error.errors });
+      }
+      res.status(500).json({ message: 'Failed to create user' });
+    }
+  });
+
+  app.delete('/api/admin/users/:id', async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+    
+    if (req.user.email !== 'findmyhelper2025@gmail.com') {
+      return res.status(403).json({ message: 'Admin access required' });
+    }
+    
+    try {
+      const userId = parseInt(req.params.id);
+      
+      // Prevent admin from deleting themselves
+      if (userId === req.user.id) {
+        return res.status(400).json({ message: 'Cannot delete your own account' });
+      }
+      
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+
+      // Only allow deleting service_verifier and call_center roles
+      if (!['service_verifier', 'call_center'].includes(user.role)) {
+        return res.status(400).json({ message: 'Can only delete staff accounts' });
+      }
+      
+      const deleted = await storage.deleteUser(userId);
+      if (!deleted) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+      
+      res.json({ message: 'User deleted successfully' });
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      res.status(500).json({ message: 'Failed to delete user' });
     }
   });
 
