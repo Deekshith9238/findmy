@@ -480,8 +480,9 @@ export class DatabaseStorage implements IStorage {
       createTableIfMissing: true
     });
     
-    // Initialize sample service categories
+    // Initialize sample service categories and admin user
     this.initializeServiceCategories();
+    this.initializeAdminUser();
   }
   
   private async initializeServiceCategories() {
@@ -520,6 +521,33 @@ export class DatabaseStorage implements IStorage {
           icon: "PawPrint"
         })
       ]);
+    }
+  }
+
+  private async initializeAdminUser() {
+    // Create admin user if it doesn't exist
+    const adminEmail = "findmyhelper2025@gmail.com";
+    const existingAdmin = await this.getUserByEmail(adminEmail);
+    
+    if (!existingAdmin) {
+      // Import password hashing function
+      const { scrypt, randomBytes } = await import("crypto");
+      const { promisify } = await import("util");
+      const scryptAsync = promisify(scrypt);
+      
+      const password = "Fmh@2025";
+      const salt = randomBytes(16).toString("hex");
+      const buf = (await scryptAsync(password, salt, 64)) as Buffer;
+      const hashedPassword = `${buf.toString("hex")}.${salt}`;
+      
+      await db.insert(users).values({
+        email: adminEmail,
+        username: "admin",
+        password: hashedPassword,
+        firstName: "Admin",
+        lastName: "User",
+        role: "admin"
+      });
     }
   }
 
