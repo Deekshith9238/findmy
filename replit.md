@@ -1,8 +1,8 @@
-# TaskHire - Service Provider Marketplace
+# Findmyhelper - Service Provider Marketplace
 
 ## Overview
 
-TaskHire is a full-stack web application that connects clients with local service providers. The platform allows clients to post tasks and find qualified service providers, while enabling service providers to offer their services and accept task requests. Built with React, Express, and PostgreSQL, the application provides a comprehensive marketplace solution with user authentication, real-time features, and a modern UI.
+Findmyhelper is a full-stack web application that connects clients with local service providers. The platform allows clients to post tasks and find qualified service providers, while enabling service providers to offer their services and accept task requests. Built with React, Express, and PostgreSQL, the application provides a comprehensive marketplace solution with user authentication, real-time features, and a modern UI.
 
 ## System Architecture
 
@@ -121,6 +121,7 @@ TaskHire is a full-stack web application that connects clients with local servic
 ```
 Changelog:
 - June 26, 2025. Initial setup
+- June 26, 2025. Changed app name from TaskHire to Findmyhelper
 ```
 
 ## User Preferences

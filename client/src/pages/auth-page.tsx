@@ -18,7 +18,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { insertUserSchema } from "@shared/schema";
+import { insertUserSchema, ServiceCategory } from "@shared/schema";
 import { useQuery } from "@tanstack/react-query";
 import { Loader2, X } from "lucide-react";
 import {
@@ -122,15 +122,12 @@ export default function AuthPage({ isModal = false, onClose, defaultToProvider =
 
   // Handle register form submission
   function onRegisterSubmit(values: RegisterFormValues) {
-    // Convert relevant fields
-    const hourlyRate = values.hourlyRate ? parseFloat(values.hourlyRate) : undefined;
-    const yearsOfExperience = values.yearsOfExperience ? parseInt(values.yearsOfExperience) : undefined;
+    // Extract only user fields for registration
+    const { hourlyRate, yearsOfExperience, categoryId, bio, availability, confirmPassword, ...userFields } = values;
     
     registerMutation.mutate({
-      ...values,
+      ...userFields,
       isServiceProvider: accountType === "provider",
-      hourlyRate,
-      yearsOfExperience,
     });
   }
 
@@ -376,14 +373,14 @@ export default function AuthPage({ isModal = false, onClose, defaultToProvider =
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {categories?.map((category) => (
+                            {categories?.map((category: any) => (
                               <SelectItem
                                 key={category.id}
                                 value={category.id.toString()}
                               >
                                 {category.name}
                               </SelectItem>
-                            ))}
+                            )) || []}
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -533,7 +530,7 @@ export default function AuthPage({ isModal = false, onClose, defaultToProvider =
             <div className="max-w-xl">
               <h2 className="text-3xl font-bold mb-4">Connect with local service professionals</h2>
               <p className="text-xl mb-6">
-                TaskHire connects you with skilled professionals for all your service needs.
+                Findmyhelper connects you with skilled professionals for all your service needs.
               </p>
               <div className="space-y-4">
                 <div className="flex items-center">
