@@ -125,6 +125,11 @@ Changelog:
 - June 26, 2025. Implemented admin role management system with findmyhelper2025@gmail.com as sole admin
 - June 26, 2025. Created dedicated admin dashboard for managing service verifier and call center staff accounts
 - June 26, 2025. Updated admin password to Fmh@2025 and removed client features from admin interface
+- June 26, 2025. Fixed authentication system - resolved frontend/backend schema mismatch (role vs isServiceProvider)
+- June 26, 2025. Implemented complete service provider registration with required fields (categoryId, hourlyRate)
+- June 26, 2025. Added conditional form fields for service provider signup with category selection
+- June 26, 2025. Fixed dialog accessibility issues with proper DialogTitle and DialogDescription components
+- June 26, 2025. Verified full authentication flow - both login and registration working correctly
 ```
 
 ## User Preferences

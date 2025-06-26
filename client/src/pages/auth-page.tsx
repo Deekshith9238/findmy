@@ -44,10 +44,24 @@ const registerSchema = z.object({
   confirmPassword: z.string(),
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
-  role: z.string(),
+  isServiceProvider: z.boolean(),
+  // Service provider specific fields (conditional)
+  categoryId: z.number().optional(),
+  hourlyRate: z.number().optional(),
+  bio: z.string().optional(),
+  yearsOfExperience: z.number().optional(),
+  availability: z.string().optional(),
 }).refine(data => data.password === data.confirmPassword, {
   message: "Passwords do not match",
   path: ["confirmPassword"]
+}).refine(data => {
+  if (data.isServiceProvider) {
+    return data.categoryId && data.hourlyRate;
+  }
+  return true;
+}, {
+  message: "Category and hourly rate are required for service providers",
+  path: ["categoryId"]
 });
 
 type LoginFormValues = z.infer<typeof loginSchema>;
@@ -90,7 +104,12 @@ function AuthPage({ isModal = false, onClose, defaultToProvider = false }: AuthP
       confirmPassword: "",
       firstName: "",
       lastName: "",
-      role: defaultToProvider ? "service_provider" : "client",
+      isServiceProvider: defaultToProvider,
+      categoryId: undefined,
+      hourlyRate: undefined,
+      bio: "",
+      yearsOfExperience: undefined,
+      availability: "",
     },
   });
 
@@ -103,7 +122,6 @@ function AuthPage({ isModal = false, onClose, defaultToProvider = false }: AuthP
   function onRegisterSubmit(values: RegisterFormValues) {
     const userData = {
       ...values,
-      role: accountType === "provider" ? "service_provider" : "client",
     };
     delete (userData as any).confirmPassword;
     registerMutation.mutate(userData);
@@ -112,7 +130,7 @@ function AuthPage({ isModal = false, onClose, defaultToProvider = false }: AuthP
   // Handle account type change
   const handleAccountTypeChange = (value: string) => {
     setAccountType(value);
-    registerForm.setValue("role", value === "provider" ? "service_provider" : "client");
+    registerForm.setValue("isServiceProvider", value === "provider");
   };
 
   // If user is already logged in and this is not a modal, redirect to home
@@ -329,6 +347,114 @@ function AuthPage({ isModal = false, onClose, defaultToProvider = false }: AuthP
                   </FormItem>
                 )}
               />
+
+              {/* Service Provider Specific Fields */}
+              {accountType === "provider" && (
+                <>
+                  <FormField
+                    control={registerForm.control}
+                    name="categoryId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Service Category</FormLabel>
+                        <Select 
+                          onValueChange={(value) => field.onChange(parseInt(value))}
+                          value={field.value?.toString()}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select a service category" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {categories && categories.map((category: any) => (
+                              <SelectItem key={category.id} value={category.id.toString()}>
+                                {category.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={registerForm.control}
+                    name="hourlyRate"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Hourly Rate ($)</FormLabel>
+                        <FormControl>
+                          <Input 
+                            type="number" 
+                            min="1"
+                            placeholder="25"
+                            {...field}
+                            onChange={(e) => field.onChange(parseInt(e.target.value) || undefined)}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={registerForm.control}
+                    name="bio"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Bio (Optional)</FormLabel>
+                        <FormControl>
+                          <Textarea 
+                            placeholder="Tell clients about your experience and expertise..."
+                            className="resize-none"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={registerForm.control}
+                    name="yearsOfExperience"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Years of Experience (Optional)</FormLabel>
+                        <FormControl>
+                          <Input 
+                            type="number" 
+                            min="0"
+                            placeholder="5"
+                            {...field}
+                            onChange={(e) => field.onChange(parseInt(e.target.value) || undefined)}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={registerForm.control}
+                    name="availability"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Availability (Optional)</FormLabel>
+                        <FormControl>
+                          <Input 
+                            placeholder="Weekdays 9am-5pm"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </>
+              )}
 
               <Button 
                 type="submit" 
