@@ -123,7 +123,8 @@ Changelog:
 - June 26, 2025. Initial setup
 - June 26, 2025. Changed app name from TaskHire to Findmyhelper
 - June 26, 2025. Implemented admin role management system with findmyhelper2025@gmail.com as sole admin
-- June 26, 2025. Created admin dashboard for managing service verifier and call center staff accounts
+- June 26, 2025. Created dedicated admin dashboard for managing service verifier and call center staff accounts
+- June 26, 2025. Updated admin password to Fmh@2025 and removed client features from admin interface
 ```
 
 ## User Preferences

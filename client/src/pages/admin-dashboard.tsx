@@ -12,7 +12,8 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Users, UserPlus, Shield, Phone } from "lucide-react";
+import { Users, UserPlus, Shield, Phone, Settings, Database } from "lucide-react";
+import MainLayout from "@/components/MainLayout";
 
 const createUserSchema = z.object({
   username: z.string().min(3, "Username must be at least 3 characters"),
@@ -114,14 +115,54 @@ export default function AdminDashboard() {
   };
 
   return (
-    <div className="container mx-auto px-4 py-8 space-y-8">
-      <div className="flex items-center gap-3">
-        <Shield className="h-8 w-8 text-primary" />
-        <div>
-          <h1 className="text-3xl font-bold">Admin Dashboard</h1>
-          <p className="text-muted-foreground">Manage service verifiers and call center staff</p>
+    <MainLayout>
+      <div className="container mx-auto px-4 py-8 space-y-8">
+        <div className="flex items-center gap-3">
+          <Settings className="h-8 w-8 text-primary" />
+          <div>
+            <h1 className="text-3xl font-bold">System Administration</h1>
+            <p className="text-muted-foreground">Manage Findmyhelper platform and staff accounts</p>
+          </div>
         </div>
-      </div>
+
+        {/* Admin Stats Overview */}
+        <div className="grid md:grid-cols-3 gap-6">
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-3">
+                <Shield className="h-8 w-8 text-blue-500" />
+                <div>
+                  <p className="text-sm text-muted-foreground">Service Verifiers</p>
+                  <p className="text-2xl font-bold">{staffUsers?.filter((user: any) => user.role === 'service_verifier').length || 0}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-3">
+                <Phone className="h-8 w-8 text-green-500" />
+                <div>
+                  <p className="text-sm text-muted-foreground">Call Center Staff</p>
+                  <p className="text-2xl font-bold">{staffUsers?.filter((user: any) => user.role === 'call_center').length || 0}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-3">
+                <Database className="h-8 w-8 text-purple-500" />
+                <div>
+                  <p className="text-sm text-muted-foreground">Total Staff</p>
+                  <p className="text-2xl font-bold">{staffUsers?.length || 0}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
 
       <div className="grid md:grid-cols-2 gap-8">
         {/* Create User Form */}
@@ -310,7 +351,8 @@ export default function AdminDashboard() {
             )}
           </CardContent>
         </Card>
+        </div>
       </div>
-    </div>
+    </MainLayout>
   );
 }
