@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { useState } from "react";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import AuthPage from "@/pages/auth-page";
 
 export default function HowItWorksSection() {
@@ -56,6 +56,8 @@ export default function HowItWorksSection() {
               
               <Dialog open={authDialogOpen} onOpenChange={setAuthDialogOpen}>
                 <DialogContent className="sm:max-w-[425px] p-0">
+                  <DialogTitle className="sr-only">Get Started</DialogTitle>
+                  <DialogDescription className="sr-only">Create your account to start using our services</DialogDescription>
                   <AuthPage 
                     isModal={true} 
                     onClose={() => setAuthDialogOpen(false)} 

@@ -16,7 +16,7 @@ import HowItWorksSection from "@/components/HowItWorksSection";
 import MainLayout from "@/components/MainLayout";
 import { useAuth } from "@/hooks/use-auth";
 import { useState } from "react";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import AuthPage from "@/pages/auth-page";
 import { Loader2, MapPin, ArrowRight, Star, StarHalf } from "lucide-react";
 
@@ -238,6 +238,8 @@ export default function HomePage() {
                 
                 <Dialog open={authDialogOpen} onOpenChange={setAuthDialogOpen}>
                   <DialogContent className="sm:max-w-[425px] p-0">
+                    <DialogTitle className="sr-only">Sign up as Service Provider</DialogTitle>
+                    <DialogDescription className="sr-only">Create your account to start offering services as a provider</DialogDescription>
                     <AuthPage 
                       isModal={true} 
                       onClose={() => setAuthDialogOpen(false)} 
