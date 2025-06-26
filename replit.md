@@ -122,6 +122,8 @@ Findmyhelper is a full-stack web application that connects clients with local se
 Changelog:
 - June 26, 2025. Initial setup
 - June 26, 2025. Changed app name from TaskHire to Findmyhelper
+- June 26, 2025. Implemented admin role management system with findmyhelper2025@gmail.com as sole admin
+- June 26, 2025. Created admin dashboard for managing service verifier and call center staff accounts
 ```
 
 ## User Preferences
