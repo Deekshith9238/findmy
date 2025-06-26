@@ -1,7 +1,7 @@
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useState } from "react";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import AuthPage from "@/pages/auth-page";
 import Footer from "./Footer";
 import {
@@ -190,7 +190,9 @@ export default function MainLayout({ children }: MainLayoutProps) {
 
       {/* Auth Dialog */}
       <Dialog open={authDialogOpen} onOpenChange={setAuthDialogOpen}>
-        <DialogContent className="sm:max-w-[425px] p-0">
+        <DialogContent className="sm:max-w-[425px] p-0 max-h-[90vh] overflow-y-auto">
+          <DialogTitle className="sr-only">Authentication</DialogTitle>
+          <DialogDescription className="sr-only">Sign in or create your account</DialogDescription>
           <AuthPage isModal={true} onClose={closeDialog} />
         </DialogContent>
       </Dialog>

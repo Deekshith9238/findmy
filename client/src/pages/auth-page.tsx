@@ -1,15 +1,13 @@
-import { useState } from "react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/hooks/use-auth";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Form,
   FormControl,
@@ -18,9 +16,6 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { insertUserSchema, ServiceCategory } from "@shared/schema";
-import { useQuery } from "@tanstack/react-query";
-import { Loader2, X } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -28,43 +23,32 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Redirect } from "wouter";
+import { useAuth } from "@/hooks/use-auth";
+import { Loader2, X } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import MainLayout from "@/components/MainLayout";
+import { Redirect } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 
-// Login form schema
+// Login schema
 const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
   password: z.string().min(1, "Password is required"),
 });
 
-// Registration form schema
-const registerSchema = insertUserSchema
-  .extend({
-    confirmPassword: z.string().min(6, "Password must be at least 6 characters"),
-    role: z.string().default("client"),
-    // Provider-specific fields
-    categoryId: z.string().optional(),
-    hourlyRate: z.string().optional(),
-    bio: z.string().optional(),
-    yearsOfExperience: z.string().optional(),
-    availability: z.string().optional(),
-  })
-  .refine((data) => data.password === data.confirmPassword, {
-    message: "Passwords don't match",
-    path: ["confirmPassword"],
-  })
-  .refine(
-    (data) => {
-      if (data.role === "service_provider") {
-        return !!data.categoryId && !!data.hourlyRate;
-      }
-      return true;
-    },
-    {
-      message: "Category and hourly rate are required for service providers",
-      path: ["categoryId"],
-    }
-  );
+// Register schema
+const registerSchema = z.object({
+  username: z.string().min(1, "Username is required"),
+  email: z.string().email("Invalid email address"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+  confirmPassword: z.string(),
+  firstName: z.string().min(1, "First name is required"),
+  lastName: z.string().min(1, "Last name is required"),
+  role: z.string(),
+}).refine(data => data.password === data.confirmPassword, {
+  message: "Passwords do not match",
+  path: ["confirmPassword"]
+});
 
 type LoginFormValues = z.infer<typeof loginSchema>;
 type RegisterFormValues = z.infer<typeof registerSchema>;
@@ -75,7 +59,7 @@ interface AuthPageProps {
   defaultToProvider?: boolean;
 }
 
-export default function AuthPage({ isModal = false, onClose, defaultToProvider = false }: AuthPageProps) {
+function AuthPage({ isModal = false, onClose, defaultToProvider = false }: AuthPageProps) {
   const { user, loginMutation, registerMutation } = useAuth();
   const [activeTab, setActiveTab] = useState<string>(defaultToProvider ? "register" : "login");
   const [accountType, setAccountType] = useState<string>(defaultToProvider ? "provider" : "client");
@@ -107,11 +91,6 @@ export default function AuthPage({ isModal = false, onClose, defaultToProvider =
       firstName: "",
       lastName: "",
       role: defaultToProvider ? "service_provider" : "client",
-      categoryId: "",
-      hourlyRate: "",
-      bio: "",
-      yearsOfExperience: "",
-      availability: "",
     },
   });
 
@@ -122,13 +101,12 @@ export default function AuthPage({ isModal = false, onClose, defaultToProvider =
 
   // Handle register form submission
   function onRegisterSubmit(values: RegisterFormValues) {
-    // Extract only user fields for registration
-    const { hourlyRate, yearsOfExperience, categoryId, bio, availability, confirmPassword, ...userFields } = values;
-    
-    registerMutation.mutate({
-      ...userFields,
+    const userData = {
+      ...values,
       role: accountType === "provider" ? "service_provider" : "client",
-    });
+    };
+    delete (userData as any).confirmPassword;
+    registerMutation.mutate(userData);
   }
 
   // Handle account type change
@@ -242,8 +220,8 @@ export default function AuthPage({ isModal = false, onClose, defaultToProvider =
                 }`}
               >
                 <RadioGroupItem value="client" id="client" className="sr-only" />
-                <div className="w-12 h-12 rounded-full bg-primary-light flex items-center justify-center mb-2">
-                  <i className="fas fa-user text-primary text-xl"></i>
+                <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-2">
+                  <span className="text-primary text-xl">👤</span>
                 </div>
                 <span className="font-medium">I need services</span>
                 <p className="text-sm text-neutral-500 mt-1">Hire skilled professionals</p>
@@ -255,8 +233,8 @@ export default function AuthPage({ isModal = false, onClose, defaultToProvider =
                 }`}
               >
                 <RadioGroupItem value="provider" id="provider" className="sr-only" />
-                <div className="w-12 h-12 rounded-full bg-secondary-light flex items-center justify-center mb-2">
-                  <i className="fas fa-briefcase text-secondary text-xl"></i>
+                <div className="w-12 h-12 rounded-full bg-secondary/10 flex items-center justify-center mb-2">
+                  <span className="text-secondary text-xl">💼</span>
                 </div>
                 <span className="font-medium">I provide services</span>
                 <p className="text-sm text-neutral-500 mt-1">Offer skills & earn money</p>
@@ -352,119 +330,6 @@ export default function AuthPage({ isModal = false, onClose, defaultToProvider =
                 )}
               />
 
-              {/* Provider-specific fields */}
-              {accountType === "provider" && (
-                <div className="space-y-4 border-t pt-4 mt-4">
-                  <h3 className="font-medium">Service provider details</h3>
-
-                  <FormField
-                    control={registerForm.control}
-                    name="categoryId"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Service Category</FormLabel>
-                        <Select
-                          onValueChange={field.onChange}
-                          defaultValue={field.value}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select your main service" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {(categories || []).map((category: any) => (
-                              <SelectItem
-                                key={category.id}
-                                value={category.id.toString()}
-                              >
-                                {category.name}
-                              </SelectItem>
-                            )) || []}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={registerForm.control}
-                    name="hourlyRate"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Hourly Rate ($)</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="number"
-                            min="1"
-                            placeholder="25"
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={registerForm.control}
-                    name="bio"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>About Your Services</FormLabel>
-                        <FormControl>
-                          <Textarea
-                            placeholder="Describe your experience, skills, and the services you offer..."
-                            className="min-h-20"
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField
-                      control={registerForm.control}
-                      name="yearsOfExperience"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Years of Experience</FormLabel>
-                          <FormControl>
-                            <Input
-                              type="number"
-                              min="0"
-                              placeholder="5"
-                              {...field}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={registerForm.control}
-                      name="availability"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Availability</FormLabel>
-                          <FormControl>
-                            <Input
-                              placeholder="Weekdays, 9AM-5PM"
-                              {...field}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                </div>
-              )}
-
               <Button 
                 type="submit" 
                 className="w-full"
@@ -497,20 +362,10 @@ export default function AuthPage({ isModal = false, onClose, defaultToProvider =
     </Tabs>
   );
 
-  // If it's a modal, just return the content
+  // If it's a modal, just return the content without custom close button
   if (isModal) {
     return (
-      <div className="relative">
-        {onClose && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="absolute right-2 top-2 z-10"
-            onClick={onClose}
-          >
-            <X className="h-4 w-4" />
-          </Button>
-        )}
+      <div className="w-full">
         {authContent}
       </div>
     );
@@ -526,32 +381,11 @@ export default function AuthPage({ isModal = false, onClose, defaultToProvider =
           </div>
         </div>
         <div className="relative hidden w-0 flex-1 lg:block">
-          <div className="absolute inset-0 bg-gradient-to-r from-primary to-blue-700 flex flex-col justify-center items-center text-white p-12">
-            <div className="max-w-xl">
-              <h2 className="text-3xl font-bold mb-4">Connect with local service professionals</h2>
-              <p className="text-xl mb-6">
-                Findmyhelper connects you with skilled professionals for all your service needs.
-              </p>
-              <div className="space-y-4">
-                <div className="flex items-center">
-                  <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center mr-3">
-                    <i className="fas fa-check text-white"></i>
-                  </div>
-                  <span className="text-lg">Quick and reliable service</span>
-                </div>
-                <div className="flex items-center">
-                  <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center mr-3">
-                    <i className="fas fa-check text-white"></i>
-                  </div>
-                  <span className="text-lg">Verified professionals</span>
-                </div>
-                <div className="flex items-center">
-                  <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center mr-3">
-                    <i className="fas fa-check text-white"></i>
-                  </div>
-                  <span className="text-lg">Secure transactions</span>
-                </div>
-              </div>
+          <div className="absolute inset-0 h-full w-full bg-gradient-to-br from-primary to-blue-600" />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="text-center text-white">
+              <h2 className="text-3xl font-bold mb-4">Join Findmyhelper Today</h2>
+              <p className="text-xl opacity-90">Connect with skilled professionals in your area</p>
             </div>
           </div>
         </div>
@@ -559,3 +393,5 @@ export default function AuthPage({ isModal = false, onClose, defaultToProvider =
     </MainLayout>
   );
 }
+
+export default AuthPage;
