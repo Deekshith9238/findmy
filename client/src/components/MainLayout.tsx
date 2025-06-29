@@ -51,6 +51,9 @@ export default function MainLayout({ children }: MainLayoutProps) {
             <Link href="/service-categories" className="font-medium hover:text-primary transition-colors">
               Services
             </Link>
+            <Link href="/demo" className="font-medium hover:text-primary transition-colors">
+              🔔 Demo
+            </Link>
             {user && (
               <>
                 {isAdmin ? (
