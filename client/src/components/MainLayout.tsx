@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import AuthPage from "@/pages/auth-page";
 import Footer from "./Footer";
+import { NotificationSystem } from "./NotificationSystem";
 import {
   Sheet,
   SheetContent,
@@ -76,6 +77,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
           <div className="flex items-center space-x-3">
             {user ? (
               <>
+                <NotificationSystem user={user} />
                 <Button
                   variant="outline"
                   onClick={handleLogout}

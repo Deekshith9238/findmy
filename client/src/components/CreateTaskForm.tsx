@@ -30,6 +30,8 @@ const taskFormSchema = z.object({
   title: z.string().min(5, "Title must be at least 5 characters"),
   description: z.string().min(10, "Description must be at least 10 characters"),
   location: z.string().min(3, "Location is required"),
+  latitude: z.string().min(1, "Latitude is required"),
+  longitude: z.string().min(1, "Longitude is required"),
   categoryId: z.string().min(1, "Category is required"),
   budget: z.string().optional(),
 });
@@ -54,6 +56,8 @@ export default function CreateTaskForm({ onSuccess }: CreateTaskFormProps) {
       const taskData = {
         ...data,
         categoryId: parseInt(data.categoryId),
+        latitude: parseFloat(data.latitude),
+        longitude: parseFloat(data.longitude),
         budget: data.budget ? parseFloat(data.budget) : undefined,
       };
       
@@ -85,10 +89,41 @@ export default function CreateTaskForm({ onSuccess }: CreateTaskFormProps) {
       title: "",
       description: "",
       location: "",
+      latitude: "",
+      longitude: "",
       categoryId: "",
       budget: "",
     },
   });
+
+  // Get current location
+  const getCurrentLocation = () => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          form.setValue("latitude", position.coords.latitude.toString());
+          form.setValue("longitude", position.coords.longitude.toString());
+          toast({
+            title: "Location detected",
+            description: "Your current location has been set.",
+          });
+        },
+        (error) => {
+          toast({
+            title: "Location error",
+            description: "Unable to get your location. Please enter coordinates manually.",
+            variant: "destructive",
+          });
+        }
+      );
+    } else {
+      toast({
+        title: "Geolocation not supported",
+        description: "Please enter coordinates manually.",
+        variant: "destructive",
+      });
+    }
+  };
 
   // Form submission handler
   function onSubmit(values: TaskFormValues) {
@@ -180,6 +215,55 @@ export default function CreateTaskForm({ onSuccess }: CreateTaskFormProps) {
             </FormItem>
           )}
         />
+
+        <div className="grid grid-cols-2 gap-4">
+          <FormField
+            control={form.control}
+            name="latitude"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Latitude</FormLabel>
+                <FormControl>
+                  <Input 
+                    type="number" 
+                    placeholder="40.7128" 
+                    step="any"
+                    {...field} 
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="longitude"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Longitude</FormLabel>
+                <FormControl>
+                  <Input 
+                    type="number" 
+                    placeholder="-74.0060" 
+                    step="any"
+                    {...field} 
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+
+        <Button 
+          type="button" 
+          variant="outline" 
+          onClick={getCurrentLocation}
+          className="w-full"
+        >
+          📍 Get Current Location
+        </Button>
         
         <FormField
           control={form.control}

@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
 import { setupAuth } from "./auth";
 import { z } from "zod";
@@ -7,7 +8,8 @@ import {
   insertTaskSchema, 
   insertServiceRequestSchema,
   insertReviewSchema,
-  insertUserSchema
+  insertUserSchema,
+  insertNotificationSchema
 } from "@shared/schema";
 import type { Request, Response, NextFunction } from "express";
 
@@ -142,30 +144,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Tasks routes
-  app.post("/api/tasks", async (req, res) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ message: "You must be logged in to create a task" });
-    }
-    
-    try {
-      const taskData = insertTaskSchema.parse({
-        ...req.body,
-        clientId: req.user.id
-      });
-      
-      const task = await storage.createTask(taskData);
-      res.status(201).json(task);
-    } catch (err) {
-      if (err instanceof z.ZodError) {
-        return res.status(400).json({ 
-          message: "Validation error", 
-          errors: err.errors 
-        });
-      }
-      res.status(500).json({ message: "Failed to create task" });
-    }
-  });
+  // Tasks routes (creation handled later with enhanced notification system)
   
   app.get("/api/tasks", async (_req, res) => {
     try {
@@ -277,36 +256,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Service Requests routes
-  app.post("/api/service-requests", async (req, res) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ message: "You must be logged in to create a service request" });
-    }
-    
-    try {
-      // Get the service provider to ensure it exists
-      const provider = await storage.getServiceProvider(req.body.providerId);
-      if (!provider) {
-        return res.status(404).json({ message: "Service provider not found" });
-      }
-      
-      const requestData = insertServiceRequestSchema.parse({
-        ...req.body,
-        clientId: req.user.id
-      });
-      
-      const serviceRequest = await storage.createServiceRequest(requestData);
-      res.status(201).json(serviceRequest);
-    } catch (err) {
-      if (err instanceof z.ZodError) {
-        return res.status(400).json({ 
-          message: "Validation error", 
-          errors: err.errors 
-        });
-      }
-      res.status(500).json({ message: "Failed to create service request" });
-    }
-  });
+  // Service Requests routes (creation handled later with enhanced call center workflow)
   
   app.get("/api/service-requests/client", async (req, res) => {
     if (!req.isAuthenticated()) {
@@ -319,6 +269,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Enhance requests with provider info
       const requestsWithDetails = await Promise.all(
         requests.map(async (request) => {
+          if (!request.providerId) return null;
           const providerWithDetails = await storage.getServiceProviderWithUser(request.providerId);
           
           if (!providerWithDetails) return null;
@@ -559,6 +510,247 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Notification endpoints
+  app.get("/api/notifications", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "You must be logged in to view notifications" });
+    }
+    
+    try {
+      const notifications = await storage.getNotifications(req.user.id);
+      res.json(notifications);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch notifications" });
+    }
+  });
+
+  app.get("/api/notifications/unread", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "You must be logged in to view notifications" });
+    }
+    
+    try {
+      const notifications = await storage.getUnreadNotifications(req.user.id);
+      res.json(notifications);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch unread notifications" });
+    }
+  });
+
+  app.patch("/api/notifications/:id/read", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+    
+    try {
+      const success = await storage.markNotificationAsRead(parseInt(req.params.id));
+      if (!success) {
+        return res.status(404).json({ message: "Notification not found" });
+      }
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to mark notification as read" });
+    }
+  });
+
+  app.patch("/api/notifications/read-all", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+    
+    try {
+      await storage.markAllNotificationsAsRead(req.user.id);
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to mark all notifications as read" });
+    }
+  });
+
+  // Location-based service provider search
+  app.get("/api/providers/nearby", async (req, res) => {
+    try {
+      const { lat, lng, radius = 10, categoryId } = req.query;
+      
+      if (!lat || !lng) {
+        return res.status(400).json({ message: "Latitude and longitude are required" });
+      }
+      
+      const latitude = parseFloat(lat as string);
+      const longitude = parseFloat(lng as string);
+      const searchRadius = parseFloat(radius as string);
+      const category = categoryId ? parseInt(categoryId as string) : undefined;
+      
+      const providers = await storage.getNearbyServiceProviders(latitude, longitude, searchRadius, category);
+      res.json(providers);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to search nearby providers" });
+    }
+  });
+
   const httpServer = createServer(app);
+  
+  // Set up WebSocket server
+  const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
+  
+  // Store active WebSocket connections by user ID
+  const userConnections = new Map<number, Set<WebSocket>>();
+  
+  wss.on('connection', (ws, req) => {
+    let userId: number | null = null;
+    
+    ws.on('message', (message) => {
+      try {
+        const data = JSON.parse(message.toString());
+        
+        if (data.type === 'authenticate' && data.userId) {
+          userId = data.userId;
+          
+          if (!userConnections.has(userId)) {
+            userConnections.set(userId, new Set());
+          }
+          userConnections.get(userId)!.add(ws);
+          
+          ws.send(JSON.stringify({ type: 'authenticated', success: true }));
+        }
+      } catch (error) {
+        console.error('WebSocket message error:', error);
+      }
+    });
+    
+    ws.on('close', () => {
+      if (userId && userConnections.has(userId)) {
+        userConnections.get(userId)!.delete(ws);
+        if (userConnections.get(userId)!.size === 0) {
+          userConnections.delete(userId);
+        }
+      }
+    });
+  });
+
+  // Function to send notifications to connected clients
+  async function sendNotificationToUser(userId: number, notification: any) {
+    const connections = userConnections.get(userId);
+    if (connections) {
+      const message = JSON.stringify({
+        type: 'notification',
+        data: notification
+      });
+      
+      connections.forEach(ws => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(message);
+        }
+      });
+    }
+  }
+
+  // Enhanced task creation with location-based notifications
+  app.post("/api/tasks", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "You must be logged in to create a task" });
+    }
+    
+    try {
+      const taskData = insertTaskSchema.parse({
+        ...req.body,
+        clientId: req.user.id
+      });
+      
+      const task = await storage.createTask(taskData);
+      
+      // Find nearby service providers
+      const nearbyProviders = await storage.getNearbyServiceProviders(
+        task.latitude, 
+        task.longitude, 
+        10, // 10km radius
+        task.categoryId
+      );
+      
+      // Create notifications for nearby providers
+      const notifications = await Promise.all(
+        nearbyProviders.map(async (provider: any) => {
+          const notification = await storage.createNotification({
+            userId: provider.userId,
+            type: 'task_posted',
+            title: 'New Task Available',
+            message: `A new "${task.title}" task has been posted in your area`,
+            data: JSON.stringify({ taskId: task.id, distance: '< 10km' })
+          });
+          
+          // Send real-time notification
+          await sendNotificationToUser(provider.userId, notification);
+          return notification;
+        })
+      );
+      
+      res.status(201).json({ task, notificationsSent: notifications.length });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ 
+          message: "Validation error", 
+          errors: err.errors 
+        });
+      }
+      res.status(500).json({ message: "Failed to create task" });
+    }
+  });
+
+  // Enhanced service request handling with call center workflow
+  app.post("/api/service-requests", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "You must be logged in to create a service request" });
+    }
+    
+    try {
+      const requestData = insertServiceRequestSchema.parse({
+        ...req.body,
+        clientId: req.user.id,
+        status: 'assigned_to_call_center' // Auto-assign to call center
+      });
+      
+      const serviceRequest = await storage.createServiceRequest(requestData);
+      
+      // Get all call center users
+      const callCenterUsers = await storage.getStaffUsers();
+      const callCenterStaff = callCenterUsers.filter(user => user.role === 'call_center');
+      
+      if (callCenterStaff.length > 0) {
+        // Assign to first available call center user (you can implement load balancing)
+        const assignedUser = callCenterStaff[0];
+        
+        // Update service request with call center assignment
+        await storage.updateServiceRequest(serviceRequest.id, {
+          assignedToCallCenter: assignedUser.id,
+          assignedAt: new Date()
+        });
+        
+        // Create notification for call center user
+        const notification = await storage.createNotification({
+          userId: assignedUser.id,
+          type: 'call_center_assignment',
+          title: 'New Service Request Assignment',
+          message: 'A new service request has been assigned to you for provider contact',
+          data: JSON.stringify({ serviceRequestId: serviceRequest.id })
+        });
+        
+        // Send real-time notification
+        await sendNotificationToUser(assignedUser.id, notification);
+      }
+      
+      res.status(201).json(serviceRequest);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ 
+          message: "Validation error", 
+          errors: err.errors 
+        });
+      }
+      res.status(500).json({ message: "Failed to create service request" });
+    }
+  });
+
+  // Store the notification function globally so it can be used elsewhere
+  (global as any).sendNotificationToUser = sendNotificationToUser;
+
   return httpServer;
 }

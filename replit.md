@@ -130,6 +130,11 @@ Changelog:
 - June 26, 2025. Added conditional form fields for service provider signup with category selection
 - June 26, 2025. Fixed dialog accessibility issues with proper DialogTitle and DialogDescription components
 - June 26, 2025. Verified full authentication flow - both login and registration working correctly
+- June 29, 2025. Implemented comprehensive notification system with real-time WebSocket connections
+- June 29, 2025. Added location-based task posting that notifies nearby service providers within 6-10km radius
+- June 29, 2025. Created call center workflow where service requests are automatically assigned to call center staff
+- June 29, 2025. Enhanced task creation form with geolocation support for latitude/longitude coordinates
+- June 29, 2025. Added notification dropdown in header with real-time updates and browser notifications
 ```
 
 ## User Preferences

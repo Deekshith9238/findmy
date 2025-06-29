@@ -6,13 +6,14 @@ import {
   serviceRequests, type ServiceRequest, type InsertServiceRequest,
   reviews, type Review, type InsertReview,
   serviceProviderDocuments, type ServiceProviderDocument, type InsertServiceProviderDocument,
-  callCenterAssignments, type CallCenterAssignment, type InsertCallCenterAssignment
+  callCenterAssignments, type CallCenterAssignment, type InsertCallCenterAssignment,
+  notifications, type Notification, type InsertNotification
 } from "@shared/schema";
 import session from "express-session";
 import createMemoryStore from "memorystore";
 import connectPg from "connect-pg-simple";
 import { db, pool } from "./db";
-import { eq } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 
 const MemoryStore = createMemoryStore(session);
 
@@ -70,6 +71,16 @@ export interface IStorage {
   getCallCenterAssignments(callCenterUserId: number): Promise<CallCenterAssignment[]>;
   updateCallCenterAssignment(id: number, assignment: Partial<CallCenterAssignment>): Promise<CallCenterAssignment | undefined>;
   
+  // Notification methods
+  createNotification(notification: InsertNotification): Promise<Notification>;
+  getNotifications(userId: number): Promise<Notification[]>;
+  getUnreadNotifications(userId: number): Promise<Notification[]>;
+  markNotificationAsRead(id: number): Promise<boolean>;
+  markAllNotificationsAsRead(userId: number): Promise<boolean>;
+  
+  // Location-based methods
+  getNearbyServiceProviders(latitude: number, longitude: number, radius: number, categoryId?: number): Promise<ServiceProvider[]>;
+  
   // Session store
   sessionStore: session.Store;
 }
@@ -83,6 +94,7 @@ export class MemStorage implements IStorage {
   private reviews: Map<number, Review>;
   private serviceProviderDocuments: Map<number, ServiceProviderDocument>;
   private callCenterAssignments: Map<number, CallCenterAssignment>;
+  private notifications: Map<number, Notification>;
   
   sessionStore: session.Store;
   currentId: { [key: string]: number };
@@ -778,7 +790,51 @@ export class DatabaseStorage implements IStorage {
 
   async deleteUser(id: number): Promise<boolean> {
     const result = await db.delete(users).where(eq(users.id, id));
-    return result.rowCount > 0;
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  // Notification methods
+  async createNotification(notification: InsertNotification): Promise<Notification> {
+    const [result] = await db.insert(notifications).values(notification).returning();
+    return result;
+  }
+
+  async getNotifications(userId: number): Promise<Notification[]> {
+    return db.select().from(notifications).where(eq(notifications.userId, userId)).orderBy(desc(notifications.createdAt));
+  }
+
+  async getUnreadNotifications(userId: number): Promise<Notification[]> {
+    return db.select().from(notifications).where(
+      and(eq(notifications.userId, userId), eq(notifications.isRead, false))
+    ).orderBy(desc(notifications.createdAt));
+  }
+
+  async markNotificationAsRead(id: number): Promise<boolean> {
+    const result = await db.update(notifications).set({ isRead: true }).where(eq(notifications.id, id));
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async markAllNotificationsAsRead(userId: number): Promise<boolean> {
+    const result = await db.update(notifications).set({ isRead: true }).where(eq(notifications.userId, userId));
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  // Location-based methods
+  async getNearbyServiceProviders(latitude: number, longitude: number, radius: number, categoryId?: number): Promise<ServiceProvider[]> {
+    // Using the Haversine formula for distance calculation
+    const query = `
+      SELECT sp.*, u.latitude, u.longitude 
+      FROM service_providers sp 
+      JOIN users u ON sp.user_id = u.id 
+      WHERE u.latitude IS NOT NULL 
+        AND u.longitude IS NOT NULL 
+        AND (6371 * acos(cos(radians($1)) * cos(radians(u.latitude)) * cos(radians(u.longitude) - radians($2)) + sin(radians($1)) * sin(radians(u.latitude)))) <= $3
+        ${categoryId ? 'AND sp.category_id = $4' : ''}
+    `;
+    
+    const params = categoryId ? [latitude, longitude, radius, categoryId] : [latitude, longitude, radius];
+    const result = await pool.query(query, params);
+    return result.rows;
   }
 }
 

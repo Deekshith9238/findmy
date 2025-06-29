@@ -23,6 +23,9 @@ export const users = pgTable("users", {
   role: text("role").notNull().default(userRoles.CLIENT),
   profilePicture: text("profile_picture"),
   phoneNumber: text("phone_number"),
+  latitude: doublePrecision("latitude"),
+  longitude: doublePrecision("longitude"),
+  address: text("address"),
   isActive: boolean("is_active").notNull().default(true),
   createdBy: integer("created_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
@@ -41,6 +44,7 @@ export const usersRelations = relations(users, ({ many, one }) => ({
   verifiedProviders: many(serviceProviders, { relationName: 'verifier' }),
   verifiedDocuments: many(serviceProviderDocuments, { relationName: 'verifier' }),
   assignedServiceRequests: many(serviceRequests, { relationName: 'callCenter' }),
+  notifications: many(notifications),
 }));
 
 // Service categories
@@ -141,6 +145,8 @@ export const tasks = pgTable("tasks", {
   title: text("title").notNull(),
   description: text("description").notNull(),
   location: text("location").notNull(),
+  latitude: doublePrecision("latitude").notNull(),
+  longitude: doublePrecision("longitude").notNull(),
   budget: doublePrecision("budget"),
   status: text("status").notNull().default("open"),
   createdAt: timestamp("created_at").defaultNow(),
@@ -204,6 +210,18 @@ export const callCenterAssignments = pgTable("call_center_assignments", {
   completedAt: timestamp("completed_at"),
 });
 
+// Notifications table
+export const notifications = pgTable("notifications", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id),
+  type: text("type").notNull(), // task_posted, service_request, call_center_assignment, etc.
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  data: text("data"), // JSON string with additional data
+  isRead: boolean("is_read").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Service requests relations
 export const serviceRequestsRelations = relations(serviceRequests, ({ one, many }) => ({
   task: one(tasks, {
@@ -255,6 +273,14 @@ export const reviewsRelations = relations(reviews, ({ one }) => ({
   }),
 }));
 
+// Notifications relations
+export const notificationsRelations = relations(notifications, ({ one }) => ({
+  user: one(users, {
+    fields: [notifications.userId],
+    references: [users.id],
+  }),
+}));
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -300,6 +326,11 @@ export const insertCallCenterAssignmentSchema = createInsertSchema(callCenterAss
   lastAttemptAt: true
 });
 
+export const insertNotificationSchema = createInsertSchema(notifications).omit({
+  id: true,
+  createdAt: true
+});
+
 // Types
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -324,6 +355,9 @@ export type ServiceProviderDocument = typeof serviceProviderDocuments.$inferSele
 
 export type InsertCallCenterAssignment = z.infer<typeof insertCallCenterAssignmentSchema>;
 export type CallCenterAssignment = typeof callCenterAssignments.$inferSelect;
+
+export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+export type Notification = typeof notifications.$inferSelect;
 
 // User role types
 export type UserRole = typeof userRoles[keyof typeof userRoles];
