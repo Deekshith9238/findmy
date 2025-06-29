@@ -2,17 +2,18 @@ import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 
 // Configure API base URL based on environment
+// Mobile app uses the SAME backend and database as the web application
 const getApiBaseUrl = () => {
   if (__DEV__) {
-    // Development URLs - adjust these based on your local setup
+    // Development URLs - connects to same backend as web app
     if (Platform.OS === 'ios') {
       return 'http://localhost:5000/api';
     } else {
       return 'http://10.0.2.2:5000/api'; // Android emulator
     }
   } else {
-    // Production URL - replace with your actual domain
-    return 'https://your-production-domain.com/api';
+    // Production URL - same backend as web app (replace with your Replit app URL)
+    return 'https://your-replit-app.replit.app/api';
   }
 };
 

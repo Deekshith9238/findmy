@@ -126,6 +126,13 @@ Findmyhelper is a full-stack web application that connects clients with local se
 - **Push Notifications**: Expo Notifications for real-time alerts and updates
 - **API Integration**: HTTP client with automatic token management and error handling
 
+### Shared Backend Infrastructure
+- **Same Database**: Mobile app uses the identical PostgreSQL database as the web application
+- **Same API Endpoints**: All mobile API calls target the same Express.js server routes
+- **Unified User System**: Users can login from web or mobile with the same credentials
+- **Real-Time Sync**: WebSocket connections ensure data synchronization across platforms
+- **Session Management**: Cookie-based authentication works across web and mobile clients
+
 ### Mobile App Features
 - **Cross-Platform**: Single codebase for iOS and Android deployment
 - **Location-Aware**: GPS integration for location-based service matching
