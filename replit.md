@@ -139,6 +139,9 @@ Changelog:
 - June 29, 2025. Created ServiceMap component with real-time updates, category filtering, and distance calculations
 - June 29, 2025. Added dedicated map page at /map with comprehensive map controls and legend
 - June 29, 2025. Enhanced home page with interactive map preview section showcasing the mapping functionality
+- June 29, 2025. Implemented privacy control system: map access restricted to approved service providers only
+- June 29, 2025. Added address privacy protection: providers receive only task names and approximate distances before call center approval
+- June 29, 2025. Enhanced call center approval workflow to send full address details and client contact info after approval
 ```
 
 ## User Preferences

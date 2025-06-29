@@ -13,6 +13,19 @@ import {
 } from "@shared/schema";
 import type { Request, Response, NextFunction } from "express";
 
+// Distance calculation utility for privacy protection
+function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371; // Radius of the Earth in kilometers
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+    Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c; // Distance in kilometers
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Set up authentication routes
   setupAuth(app);
@@ -288,6 +301,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Get approved service requests for current service provider (for map access)
+  app.get("/api/service-requests/approved", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+
+    try {
+      if (req.user.role !== 'service_provider') {
+        return res.status(403).json({ message: "Access denied. Service providers only." });
+      }
+
+      const serviceProvider = await storage.getServiceProviderByUserId(req.user.id);
+      if (!serviceProvider) {
+        return res.status(404).json({ message: "Service provider profile not found" });
+      }
+
+      const requests = await storage.getServiceRequestsByProvider(serviceProvider.id);
+      const approvedRequests = requests.filter(r => r.status === 'call_center_approved');
+      
+      res.json(approvedRequests);
+    } catch (error) {
+      console.error('Error fetching approved service requests:', error);
+      res.status(500).json({ message: "Failed to fetch approved service requests" });
+    }
+  });
+
   app.get("/api/service-requests/provider", async (req, res) => {
     if (!req.isAuthenticated()) {
       return res.status(401).json({ message: "You must be logged in to view requests" });
@@ -345,12 +384,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get the provider profile for the current user
       const provider = await storage.getServiceProviderByUserId(req.user.id);
       
-      // Check if user is either the client or the provider
-      if (request.clientId !== req.user.id && (!provider || provider.id !== request.providerId)) {
+      // Check if user is either the client, provider, or call center staff
+      const isCallCenterStaff = req.user.role === 'call_center';
+      const isClient = request.clientId === req.user.id;
+      const isProvider = provider && provider.id === request.providerId;
+      
+      if (!isClient && !isProvider && !isCallCenterStaff) {
         return res.status(403).json({ message: "You can only update your own requests" });
       }
       
       const updatedRequest = await storage.updateServiceRequest(requestId, req.body);
+      
+      // If call center staff approved the request, send full address details to provider
+      if (isCallCenterStaff && req.body.status === 'call_center_approved' && updatedRequest && updatedRequest.providerId) {
+        // Get task details with full address
+        const task = await storage.getTask(updatedRequest.taskId);
+        const client = await storage.getUser(updatedRequest.clientId);
+        
+        if (task && client) {
+          // Get provider user details
+          const providerUser = provider ? await storage.getUser(provider.userId) : null;
+          
+          if (providerUser) {
+            // Send notification with full address details to provider
+            const addressNotification = await storage.createNotification({
+              userId: providerUser.id,
+              type: 'service_approved',
+              title: 'Service Request Approved - Address Details',
+              message: `Your service request for "${task.title}" has been approved by call center. Address: ${task.location}`,
+              data: JSON.stringify({ 
+                taskId: task.id,
+                serviceRequestId: requestId,
+                hasAddress: true,
+                clientInfo: {
+                  name: `${client.firstName} ${client.lastName}`,
+                  phone: client.phoneNumber,
+                  email: client.email
+                },
+                taskDetails: {
+                  title: task.title,
+                  description: task.description,
+                  location: task.location,
+                  latitude: task.latitude,
+                  longitude: task.longitude,
+                  budget: task.budget
+                }
+              })
+            });
+            
+            // Send real-time notification
+            await sendNotificationToUser(providerUser.id, addressNotification);
+          }
+        }
+      }
+      
       res.json(updatedRequest);
     } catch (err) {
       res.status(500).json({ message: "Failed to update service request" });
@@ -566,6 +653,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get current user's service provider profile
+  app.get("/api/providers/me", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+    
+    try {
+      const serviceProvider = await storage.getServiceProviderByUserId(req.user.id);
+      if (!serviceProvider) {
+        return res.status(404).json({ message: "Service provider profile not found" });
+      }
+      res.json(serviceProvider);
+    } catch (error) {
+      console.error('Error fetching service provider profile:', error);
+      res.status(500).json({ message: "Failed to fetch service provider profile" });
+    }
+  });
+
   // Location-based service provider search
   app.get("/api/providers/nearby", async (req, res) => {
     try {
@@ -666,15 +771,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         task.categoryId
       );
       
-      // Create notifications for nearby providers
+      // Create privacy-protected notifications for nearby providers
+      // Only send task name and approximate distance, NOT exact address
       const notifications = await Promise.all(
         nearbyProviders.map(async (provider: any) => {
+          // Calculate approximate distance for privacy
+          const distance = calculateDistance(task.latitude, task.longitude, provider.latitude, provider.longitude);
+          const approximateDistance = `~${Math.round(distance)}km away`;
+          
           const notification = await storage.createNotification({
             userId: provider.userId,
             type: 'task_posted',
             title: 'New Task Available',
-            message: `A new "${task.title}" task has been posted in your area`,
-            data: JSON.stringify({ taskId: task.id, distance: '< 10km' })
+            message: `Task: "${task.title}" - ${approximateDistance}. Address details available after call center approval.`,
+            data: JSON.stringify({ 
+              taskId: task.id, 
+              distance: approximateDistance,
+              hasAddress: false // Indicates address not included for privacy
+            })
           });
           
           // Send real-time notification
