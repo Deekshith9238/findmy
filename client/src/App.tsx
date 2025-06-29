@@ -12,6 +12,7 @@ import ServiceCategories from "@/pages/service-categories";
 import ServiceProviderProfile from "@/pages/service-provider-profile";
 import ProfilePage from "@/pages/profile-page";
 import AdminDashboard from "@/pages/admin-dashboard";
+import AdminUserManagement from "@/pages/admin-user-management";
 import DemoPage from "@/pages/demo-page";
 import ServiceMapPage from "@/pages/service-map";
 import { ProtectedRoute } from "./lib/protected-route";
@@ -29,6 +30,7 @@ function Router() {
       <ProtectedRoute path="/client-dashboard" component={ClientDashboard} />
       <ProtectedRoute path="/provider-dashboard" component={ProviderDashboard} />
       <ProtectedRoute path="/admin-dashboard" component={AdminDashboard} />
+      <ProtectedRoute path="/admin/users" component={AdminUserManagement} />
       <ProtectedRoute path="/profile" component={ProfilePage} />
       <Route component={NotFound} />
     </Switch>

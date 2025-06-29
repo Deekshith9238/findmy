@@ -191,16 +191,21 @@ export default function OnboardingWalkthrough({ isOpen, onComplete, onSkip }: On
       return;
     }
 
-    const element = document.querySelector(step.target) as HTMLElement;
-    setTargetElement(element);
+    // Add a small delay to ensure DOM is ready
+    const timeout = setTimeout(() => {
+      const element = document.querySelector(`[data-onboarding="${step.target}"]`) as HTMLElement;
+      setTargetElement(element);
 
-    if (element) {
-      // Calculate character position relative to target
-      const rect = element.getBoundingClientRect();
-      const characterX = rect.left + rect.width / 2;
-      const characterY = step.position === 'top' ? rect.top - 100 : rect.bottom + 20;
-      setCharacterPosition({ x: characterX, y: characterY });
-    }
+      if (element) {
+        // Calculate character position relative to target
+        const rect = element.getBoundingClientRect();
+        const characterX = rect.left + rect.width / 2;
+        const characterY = step.position === 'top' ? rect.top - 100 : rect.bottom + 20;
+        setCharacterPosition({ x: characterX, y: characterY });
+      }
+    }, 100);
+
+    return () => clearTimeout(timeout);
   }, [currentStep, step.target, isOpen]);
 
   const nextStep = () => {
@@ -303,7 +308,7 @@ export default function OnboardingWalkthrough({ isOpen, onComplete, onSkip }: On
           style={getTooltipPosition()}
         >
           <Card className="w-80 shadow-xl border-2 border-primary/20">
-            <CardContent className="p-6">
+            <CardContent className="p-4">
               {/* Header */}
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center space-x-3">

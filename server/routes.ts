@@ -558,6 +558,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get all users for admin
+  app.get('/api/admin/users', async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+    
+    if (req.user.email !== 'findmyhelper2025@gmail.com') {
+      return res.status(403).json({ message: 'Admin access required' });
+    }
+    
+    try {
+      const allUsers = await storage.getAllUsers();
+      // Remove passwords from response
+      const safeUsers = allUsers.map(user => {
+        const { password, ...userWithoutPassword } = user;
+        return userWithoutPassword;
+      });
+      res.json(safeUsers);
+    } catch (error) {
+      console.error('Error fetching all users:', error);
+      res.status(500).json({ message: 'Failed to fetch users' });
+    }
+  });
+
   app.delete('/api/admin/users/:id', async (req, res) => {
     if (!req.isAuthenticated()) {
       return res.status(401).json({ message: "You must be logged in" });

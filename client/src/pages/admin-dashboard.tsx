@@ -12,8 +12,9 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Users, UserPlus, Shield, Phone, Settings, Database } from "lucide-react";
+import { Users, UserPlus, Shield, Phone, Settings, Database, UserCheck } from "lucide-react";
 import MainLayout from "@/components/MainLayout";
+import { Link } from "wouter";
 
 const createUserSchema = z.object({
   username: z.string().min(3, "Username must be at least 3 characters"),
@@ -123,6 +124,35 @@ export default function AdminDashboard() {
             <h1 className="text-3xl font-bold">System Administration</h1>
             <p className="text-muted-foreground">Manage Findmyhelper platform and staff accounts</p>
           </div>
+        </div>
+
+        {/* Admin Navigation */}
+        <div className="grid md:grid-cols-2 gap-4">
+          <Link href="/admin/users">
+            <Card className="hover:shadow-md transition-shadow cursor-pointer">
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-3">
+                  <UserCheck className="h-8 w-8 text-primary" />
+                  <div>
+                    <h3 className="text-lg font-semibold">User Management</h3>
+                    <p className="text-sm text-muted-foreground">View and manage all users, clients, and service providers</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+          
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-3">
+                <UserPlus className="h-8 w-8 text-green-600" />
+                <div>
+                  <h3 className="text-lg font-semibold">Staff Creation</h3>
+                  <p className="text-sm text-muted-foreground">Create new service verifier and call center accounts</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Admin Stats Overview */}

@@ -25,6 +25,7 @@ export interface IStorage {
   getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: number, user: Partial<User>): Promise<User | undefined>;
+  getAllUsers(): Promise<User[]>;
   getStaffUsers(): Promise<User[]>;
   deleteUser(id: number): Promise<boolean>;
   
@@ -470,6 +471,10 @@ export class MemStorage implements IStorage {
   }
 
   // Staff management methods
+  async getAllUsers(): Promise<User[]> {
+    return Array.from(this.users.values());
+  }
+
   async getStaffUsers(): Promise<User[]> {
     return Array.from(this.users.values()).filter(
       (user) => user.role === "service_verifier" || user.role === "call_center"
@@ -780,6 +785,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Staff management methods
+  async getAllUsers(): Promise<User[]> {
+    return db.select().from(users);
+  }
+
   async getStaffUsers(): Promise<User[]> {
     return db.select().from(users).where(
       eq(users.role, "service_verifier")
