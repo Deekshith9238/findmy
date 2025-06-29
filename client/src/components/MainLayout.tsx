@@ -48,12 +48,16 @@ export default function MainLayout({ children }: MainLayoutProps) {
 
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center space-x-6">
-            <Link href="/service-categories" className="font-medium hover:text-primary transition-colors">
-              Services
-            </Link>
-            <Link href="/map" className="font-medium hover:text-primary transition-colors">
-              🗺️ Map
-            </Link>
+            {!isAdmin && (
+              <>
+                <Link href="/service-categories" className="font-medium hover:text-primary transition-colors">
+                  Services
+                </Link>
+                <Link href="/map" className="font-medium hover:text-primary transition-colors">
+                  🗺️ Map
+                </Link>
+              </>
+            )}
             <Link href="/demo" className="font-medium hover:text-primary transition-colors">
               🔔 Demo
             </Link>
@@ -130,9 +134,11 @@ export default function MainLayout({ children }: MainLayoutProps) {
                   <Link href="/" className="font-medium hover:text-primary transition-colors" onClick={() => setMobileMenuOpen(false)}>
                     Home
                   </Link>
-                  <Link href="/service-categories" className="font-medium hover:text-primary transition-colors" onClick={() => setMobileMenuOpen(false)}>
-                    Services
-                  </Link>
+                  {!isAdmin && (
+                    <Link href="/service-categories" className="font-medium hover:text-primary transition-colors" onClick={() => setMobileMenuOpen(false)}>
+                      Services
+                    </Link>
+                  )}
                   
                   {user ? (
                     <>

@@ -42,7 +42,7 @@ const onboardingSteps: OnboardingStep[] = [
     title: 'Find Your Perfect Helper',
     description: 'Use our smart search to find service providers by category and location. We\'ll match you with verified professionals nearby!',
     icon: <Search className="w-6 h-6" />,
-    target: '[data-onboarding="search-section"]',
+    target: 'search-section',
     position: 'bottom',
     characterMessage: 'This is where the magic begins! ✨'
   },
@@ -51,7 +51,7 @@ const onboardingSteps: OnboardingStep[] = [
     title: 'Location-Based Matching',
     description: 'We use your location to find helpers within 6-10km of you. Don\'t worry - your exact address stays private until you approve a provider!',
     icon: <MapPin className="w-6 h-6" />,
-    target: '[data-onboarding="location-input"]',
+    target: 'location-input',
     position: 'top',
     characterMessage: 'Privacy first, convenience always! 🛡️'
   },
@@ -60,7 +60,7 @@ const onboardingSteps: OnboardingStep[] = [
     title: 'Browse Service Categories',
     description: 'From home cleaning to repairs, we have trusted professionals for every need. Each category has verified experts ready to help!',
     icon: <Users className="w-6 h-6" />,
-    target: '[data-onboarding="categories"]',
+    target: 'categories',
     position: 'top',
     characterMessage: 'So many helpful services to choose from! 🔧'
   },
@@ -69,7 +69,7 @@ const onboardingSteps: OnboardingStep[] = [
     title: 'Real-Time Updates',
     description: 'Get instant notifications when providers respond to your tasks. Stay in the loop throughout the entire process!',
     icon: <Bell className="w-6 h-6" />,
-    target: '[data-onboarding="notifications"]',
+    target: 'notifications',
     position: 'bottom',
     characterMessage: 'Never miss an update with our smart alerts! 🔔'
   },
@@ -78,7 +78,7 @@ const onboardingSteps: OnboardingStep[] = [
     title: 'Call Center Protection',
     description: 'Our 24/7 call center verifies every provider before sharing your contact details. Your safety is our top priority!',
     icon: <Shield className="w-6 h-6" />,
-    target: '[data-onboarding="verification"]',
+    target: 'verification',
     position: 'top',
     characterMessage: 'We\'ve got your back every step of the way! 💪'
   },
@@ -226,7 +226,7 @@ export default function OnboardingWalkthrough({ isOpen, onComplete, onSkip }: On
     if (!targetElement) return { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' };
 
     const rect = targetElement.getBoundingClientRect();
-    const tooltipWidth = 320;
+    const tooltipWidth = 384;
     const tooltipHeight = 200;
 
     switch (step.position) {
@@ -307,7 +307,7 @@ export default function OnboardingWalkthrough({ isOpen, onComplete, onSkip }: On
           className="absolute"
           style={getTooltipPosition()}
         >
-          <Card className="w-80 shadow-xl border-2 border-primary/20">
+          <Card className="w-96 shadow-xl border-2 border-primary/20">
             <CardContent className="p-4">
               {/* Header */}
               <div className="flex items-center justify-between mb-4">

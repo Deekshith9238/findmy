@@ -199,4 +199,61 @@ export function setupAuth(app: Express) {
       res.status(500).json({ message: "Server error" });
     }
   });
+
+  app.put("/api/user", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    
+    try {
+      const { firstName, lastName, email, phoneNumber, profilePicture } = req.body;
+      
+      // Update user profile
+      const updatedUser = await storage.updateUser(req.user.id, {
+        firstName,
+        lastName,
+        email,
+        phoneNumber,
+        profilePicture,
+      });
+      
+      if (!updatedUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      res.json(updatedUser);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to update profile" });
+    }
+  });
+
+  app.put("/api/user/provider", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    
+    try {
+      const { categoryId, hourlyRate, bio, yearsOfExperience, availability } = req.body;
+      
+      // Get existing provider profile
+      const provider = await storage.getServiceProviderByUserId(req.user.id);
+      
+      if (!provider) {
+        return res.status(404).json({ message: "Provider profile not found" });
+      }
+      
+      // Update provider profile
+      const updatedProvider = await storage.updateServiceProvider(provider.id, {
+        categoryId: parseInt(categoryId),
+        hourlyRate: parseFloat(hourlyRate),
+        bio,
+        yearsOfExperience: yearsOfExperience ? parseInt(yearsOfExperience) : null,
+        availability,
+      });
+      
+      if (!updatedProvider) {
+        return res.status(404).json({ message: "Failed to update provider profile" });
+      }
+      
+      res.json(updatedProvider);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to update provider profile" });
+    }
+  });
 }
