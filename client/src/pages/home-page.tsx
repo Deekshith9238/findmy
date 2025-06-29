@@ -203,6 +203,67 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* Interactive Map Preview */}
+      <section className="py-16 bg-gray-50">
+        <div className="container mx-auto px-4">
+          <div className="text-center mb-12">
+            <h2 className="text-2xl md:text-3xl font-bold mb-3">Find Services Near You</h2>
+            <p className="text-neutral-600 max-w-2xl mx-auto mb-8">
+              Explore our interactive map to see service providers and available tasks in your area
+            </p>
+            <Link href="/map">
+              <Button variant="outline" className="mb-8">
+                🗺️ View Full Map
+              </Button>
+            </Link>
+          </div>
+          
+          <div className="max-w-4xl mx-auto">
+            <div className="bg-white rounded-lg shadow-lg p-6">
+              <div className="bg-gradient-to-br from-blue-50 to-green-50 rounded-lg h-64 relative overflow-hidden">
+                {/* Sample map pins for preview */}
+                <div className="absolute top-6 left-6 bg-green-500 text-white rounded-full w-8 h-8 flex items-center justify-center shadow-lg">
+                  👤
+                </div>
+                <div className="absolute bottom-8 right-8 bg-blue-500 text-white rounded-full w-8 h-8 flex items-center justify-center shadow-lg">
+                  💼
+                </div>
+                <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-red-500 text-white rounded-full w-8 h-8 flex items-center justify-center shadow-lg">
+                  📍
+                </div>
+                
+                {/* Map overlay text */}
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="bg-white/90 backdrop-blur-sm rounded-lg p-4 text-center">
+                    <h3 className="font-semibold text-lg mb-2">Interactive Service Map</h3>
+                    <p className="text-sm text-gray-600">
+                      • Green pins: Service providers<br/>
+                      • Blue pins: Available tasks<br/>
+                      • Red pin: Your location
+                    </p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-3 gap-4 mt-6 text-center">
+                <div>
+                  <div className="text-2xl font-bold text-green-600">4</div>
+                  <div className="text-sm text-gray-600">Active Providers</div>
+                </div>
+                <div>
+                  <div className="text-2xl font-bold text-blue-600">1</div>
+                  <div className="text-sm text-gray-600">Available Tasks</div>
+                </div>
+                <div>
+                  <div className="text-2xl font-bold text-purple-600">Real-time</div>
+                  <div className="text-sm text-gray-600">Live Updates</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* How it works section */}
       <HowItWorksSection />
 

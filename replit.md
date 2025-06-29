@@ -135,6 +135,10 @@ Changelog:
 - June 29, 2025. Created call center workflow where service requests are automatically assigned to call center staff
 - June 29, 2025. Enhanced task creation form with geolocation support for latitude/longitude coordinates
 - June 29, 2025. Added notification dropdown in header with real-time updates and browser notifications
+- June 29, 2025. Implemented interactive location-based service map with dynamic pins for providers, tasks, and user location
+- June 29, 2025. Created ServiceMap component with real-time updates, category filtering, and distance calculations
+- June 29, 2025. Added dedicated map page at /map with comprehensive map controls and legend
+- June 29, 2025. Enhanced home page with interactive map preview section showcasing the mapping functionality
 ```
 
 ## User Preferences

@@ -13,6 +13,7 @@ import ServiceProviderProfile from "@/pages/service-provider-profile";
 import ProfilePage from "@/pages/profile-page";
 import AdminDashboard from "@/pages/admin-dashboard";
 import DemoPage from "@/pages/demo-page";
+import ServiceMapPage from "@/pages/service-map";
 import { ProtectedRoute } from "./lib/protected-route";
 import { AuthProvider } from "./hooks/use-auth";
 
@@ -24,6 +25,7 @@ function Router() {
       <Route path="/service-categories" component={ServiceCategories} />
       <Route path="/provider/:id" component={ServiceProviderProfile} />
       <Route path="/demo" component={DemoPage} />
+      <Route path="/map" component={ServiceMapPage} />
       <ProtectedRoute path="/client-dashboard" component={ClientDashboard} />
       <ProtectedRoute path="/provider-dashboard" component={ProviderDashboard} />
       <ProtectedRoute path="/admin-dashboard" component={AdminDashboard} />
