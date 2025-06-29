@@ -17,6 +17,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import AuthPage from "@/pages/auth-page";
+import OnboardingWalkthrough from "@/components/OnboardingWalkthrough";
 import { 
   Loader2, 
   MapPin, 
@@ -28,7 +29,8 @@ import {
   Shield, 
   Zap,
   Play,
-  ChevronDown
+  ChevronDown,
+  Sparkles
 } from "lucide-react";
 import { motion, useAnimation } from "framer-motion";
 
@@ -94,6 +96,19 @@ export default function HomePage() {
   const [authDialogOpen, setAuthDialogOpen] = useState(false);
   const [searchCategory, setSearchCategory] = useState("");
   const [searchLocation, setSearchLocation] = useState("");
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
+
+  // Check if user is new and should see onboarding
+  useEffect(() => {
+    const hasSeenOnboarding = localStorage.getItem('hasSeenOnboarding');
+    if (!hasSeenOnboarding && !user) {
+      // Show onboarding after a short delay for new visitors
+      const timer = setTimeout(() => {
+        setOnboardingOpen(true);
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [user]);
 
   // Fetch service categories
   const { data: categories, isLoading: categoriesLoading } = useQuery<ServiceCategory[]>({
@@ -114,6 +129,16 @@ export default function HomePage() {
 
   const scrollToSection = (sectionId: string) => {
     document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const handleOnboardingComplete = () => {
+    localStorage.setItem('hasSeenOnboarding', 'true');
+    setOnboardingOpen(false);
+  };
+
+  const handleOnboardingSkip = () => {
+    localStorage.setItem('hasSeenOnboarding', 'true');
+    setOnboardingOpen(false);
   };
 
   return (
@@ -186,6 +211,7 @@ export default function HomePage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 1, delay: 0.6 }}
             className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 max-w-4xl mx-auto mb-12"
+            data-onboarding="search-section"
           >
             <div className="grid md:grid-cols-3 gap-4">
               <div>
@@ -202,7 +228,7 @@ export default function HomePage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div>
+              <div data-onboarding="location-input">
                 <Input
                   placeholder="Enter your location"
                   value={searchLocation}
@@ -331,7 +357,7 @@ export default function HomePage() {
       </section>
 
       {/* Features Section */}
-      <section className="py-20 bg-white">
+      <section className="py-20 bg-white" data-onboarding="verification">
         <div className="container mx-auto px-4">
           <motion.div
             initial={{ opacity: 0, y: 30 }}
@@ -546,7 +572,7 @@ export default function HomePage() {
               </p>
             </motion.div>
 
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6" data-onboarding="categories">
               {categories.slice(0, 8).map((category, index) => (
                 <motion.div
                   key={category.id}
@@ -926,6 +952,32 @@ export default function HomePage() {
           />
         </DialogContent>
       </Dialog>
+
+      {/* Onboarding Walkthrough */}
+      <OnboardingWalkthrough
+        isOpen={onboardingOpen}
+        onComplete={handleOnboardingComplete}
+        onSkip={handleOnboardingSkip}
+      />
+
+      {/* Tour Button for testing/demo */}
+      {!onboardingOpen && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 1 }}
+          className="fixed bottom-6 right-6 z-40"
+        >
+          <Button
+            onClick={() => setOnboardingOpen(true)}
+            className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white shadow-lg hover:shadow-xl transition-all duration-300 rounded-full p-4"
+            size="lg"
+          >
+            <Sparkles className="w-5 h-5 mr-2" />
+            Take a Tour
+          </Button>
+        </motion.div>
+      )}
     </MainLayout>
   );
 }

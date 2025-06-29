@@ -83,7 +83,9 @@ export default function MainLayout({ children }: MainLayoutProps) {
           <div className="flex items-center space-x-3">
             {user ? (
               <>
-                <NotificationSystem user={user} />
+                <div data-onboarding="notifications">
+                  <NotificationSystem user={user} />
+                </div>
                 <Button
                   variant="outline"
                   onClick={handleLogout}
