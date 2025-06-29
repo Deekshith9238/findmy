@@ -142,6 +142,9 @@ Changelog:
 - June 29, 2025. Implemented privacy control system: map access restricted to approved service providers only
 - June 29, 2025. Added address privacy protection: providers receive only task names and approximate distances before call center approval
 - June 29, 2025. Enhanced call center approval workflow to send full address details and client contact info after approval
+- June 29, 2025. Created animated landing page with videos, animations, and interactive elements using Framer Motion
+- June 29, 2025. Added hero section with animated background, video demo section, testimonials, and interactive phone mockup
+- June 29, 2025. Implemented animated counters, floating elements, and scroll-triggered animations for enhanced user experience
 ```
 
 ## User Preferences
