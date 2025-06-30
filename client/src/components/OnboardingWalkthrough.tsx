@@ -222,17 +222,25 @@ export default function OnboardingWalkthrough({ isOpen, onComplete, onSkip }: On
         
         if (scrollTarget) {
           scrollTarget.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          // Retry after scroll
-          setTimeout(() => {
+          // Retry after scroll with multiple attempts
+          let retryCount = 0;
+          const maxRetries = 5;
+          const retryInterval = setInterval(() => {
+            retryCount++;
             const retryElement = document.querySelector(`[data-onboarding="${step.target}"]`) as HTMLElement;
-            setTargetElement(retryElement);
+            
             if (retryElement) {
+              setTargetElement(retryElement);
               const rect = retryElement.getBoundingClientRect();
               const characterX = rect.left + rect.width / 2;
               const characterY = step.position === 'top' ? rect.top - 100 : rect.bottom + 20;
               setCharacterPosition({ x: characterX, y: characterY });
+              clearInterval(retryInterval);
+            } else if (retryCount >= maxRetries) {
+              console.warn(`Could not find target element after ${maxRetries} retries`);
+              clearInterval(retryInterval);
             }
-          }, 500);
+          }, 200);
         }
       }
     }, 100);
@@ -242,7 +250,14 @@ export default function OnboardingWalkthrough({ isOpen, onComplete, onSkip }: On
 
   const nextStep = () => {
     if (currentStep < availableSteps.length - 1) {
-      setCurrentStep(currentStep + 1);
+      // Reset target element when moving to next step
+      setTargetElement(null);
+      setCharacterPosition(undefined);
+      
+      // Small delay to ensure smooth transition
+      setTimeout(() => {
+        setCurrentStep(currentStep + 1);
+      }, 100);
     } else {
       onComplete();
     }
@@ -250,7 +265,14 @@ export default function OnboardingWalkthrough({ isOpen, onComplete, onSkip }: On
 
   const prevStep = () => {
     if (currentStep > 0) {
-      setCurrentStep(currentStep - 1);
+      // Reset target element when moving to previous step
+      setTargetElement(null);
+      setCharacterPosition(undefined);
+      
+      // Small delay to ensure smooth transition
+      setTimeout(() => {
+        setCurrentStep(currentStep - 1);
+      }, 100);
     }
   };
 
@@ -360,7 +382,7 @@ export default function OnboardingWalkthrough({ isOpen, onComplete, onSkip }: On
           initial={{ opacity: 0, scale: 0.8 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.8 }}
-          className="absolute"
+          className="fixed"
           style={getTooltipPosition()}
         >
           <Card className="w-96 shadow-xl border-2 border-primary/20">
