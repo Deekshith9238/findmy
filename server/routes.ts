@@ -3,8 +3,10 @@ import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
 import { setupAuth } from "./auth";
-import { pool } from "./db";
+import { pool, db } from "./db";
 import { z } from "zod";
+import { serviceProviders } from "@shared/schema";
+import { eq } from "drizzle-orm";
 import { 
   insertTaskSchema, 
   insertServiceRequestSchema,
@@ -858,6 +860,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Test endpoint to check database connection
+  app.get("/api/test/db", async (req, res) => {
+    try {
+      const result = await pool.query('SELECT COUNT(*) FROM service_providers');
+      res.json({ status: "Database connection working", count: result.rows[0].count });
+    } catch (error) {
+      const err = error as Error;
+      res.status(500).json({ error: "Database connection failed", message: err.message });
+    }
+  });
+
+  // Test user info endpoint 
+  app.get("/api/test/user", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+    res.json({ 
+      debug: true, 
+      userId: req.user?.id,
+      userRole: req.user?.role,
+      userExists: !!req.user
+    });
+  });
+
   // Get current user's service provider profile
   app.get("/api/providers/me", async (req, res) => {
     if (!req.isAuthenticated()) {
@@ -865,14 +891,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     
     try {
-      const serviceProvider = await storage.getServiceProviderByUserId(req.user.id);
-      if (!serviceProvider) {
+      // Use raw SQL query that we know works
+      const result = await pool.query('SELECT * FROM service_providers WHERE user_id = $1', [req.user.id]);
+      
+      if (result.rows.length === 0) {
         return res.status(404).json({ message: "Service provider profile not found" });
       }
-      res.json(serviceProvider);
+      
+      // Convert to expected format
+      const provider = {
+        id: result.rows[0].id,
+        userId: result.rows[0].user_id,
+        categoryId: result.rows[0].category_id,
+        bio: result.rows[0].bio,
+        hourlyRate: result.rows[0].hourly_rate,
+        yearsOfExperience: result.rows[0].years_of_experience,
+        availability: result.rows[0].availability,
+        rating: result.rows[0].rating,
+        completedJobs: result.rows[0].completed_jobs,
+        verificationStatus: result.rows[0].verification_status,
+        verifiedBy: result.rows[0].verified_by,
+        verifiedAt: result.rows[0].verified_at,
+        rejectionReason: result.rows[0].rejection_reason,
+        createdAt: result.rows[0].created_at,
+        updatedAt: result.rows[0].updated_at
+      };
+      
+      res.json(provider);
     } catch (error) {
-      console.error('Error fetching service provider profile:', error);
-      res.status(500).json({ message: "Failed to fetch service provider profile" });
+      const err = error as Error;
+      res.status(500).json({ message: "Database error", error: err.message });
     }
   });
 
@@ -899,7 +947,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         categoryId: parseInt(categoryId),
         hourlyRate: parseFloat(hourlyRate),
         bio,
-        experience: experience || null
+        yearsOfExperience: experience ? parseInt(experience) : null
       });
       
       res.json(updatedProvider);

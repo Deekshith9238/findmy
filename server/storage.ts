@@ -623,8 +623,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getServiceProviderByUserId(userId: number): Promise<ServiceProvider | undefined> {
-    const [provider] = await db.select().from(serviceProviders).where(eq(serviceProviders.userId, userId));
-    return provider;
+    try {
+      console.log('DatabaseStorage: Querying provider for userId:', userId);
+      const [provider] = await db.select().from(serviceProviders).where(eq(serviceProviders.userId, userId));
+      console.log('DatabaseStorage: Provider result:', provider);
+      return provider;
+    } catch (error) {
+      console.error('DatabaseStorage: Error querying provider:', error);
+      throw error;
+    }
   }
 
   async getServiceProviders(): Promise<ServiceProvider[]> {
