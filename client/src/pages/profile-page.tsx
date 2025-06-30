@@ -55,7 +55,7 @@ export default function ProfilePage() {
   // Fetch provider profile if user is a service provider
   const { data: providerProfile, isLoading: providerLoading } = useQuery({
     queryKey: ["/api/providers/me"],
-    enabled: true, // Temporarily always enabled for debugging
+    enabled: userData?.role === "service_provider",
   });
 
   // Profile form

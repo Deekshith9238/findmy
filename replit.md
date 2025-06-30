@@ -194,6 +194,9 @@ Changelog:
 - June 30, 2025. Added improved positioning and error handling for tour tooltips and character placement
 - June 30, 2025. Implemented automatic scrolling to target sections during tour navigation for better visibility
 - June 30, 2025. Enhanced tour transitions with smooth scrolling and proper timing for element detection
+- June 30, 2025. Fixed critical route ordering bug: moved `/api/providers/me` before `/api/providers/:id` to prevent interception
+- June 30, 2025. Resolved HTTP 413 payload too large error by increasing Express body parser limits to 50MB for document uploads
+- June 30, 2025. Verified provider profile API endpoints now work correctly with proper authentication and data retrieval
 ```
 
 ## User Preferences
