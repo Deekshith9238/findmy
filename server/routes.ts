@@ -122,6 +122,90 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Failed to fetch service providers" });
     }
   });
+
+  // Get current user's service provider profile
+  app.get("/api/providers/me", async (req, res) => {
+    console.log('=== /api/providers/me route hit ===');
+    console.log('req.isAuthenticated():', req.isAuthenticated());
+    console.log('req.user:', req.user);
+    
+    if (!req.isAuthenticated()) {
+      console.log('Authentication failed');
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+    
+    try {
+      console.log('Fetching provider for user ID:', req.user.id);
+      const result = await pool.query('SELECT * FROM service_providers WHERE user_id = $1', [req.user.id]);
+      console.log('Raw SQL result rows count:', result.rows.length);
+      console.log('Raw SQL result:', result.rows);
+      
+      if (result.rows.length === 0) {
+        console.log('No provider found for user ID:', req.user.id);
+        return res.status(404).json({ message: "Service provider profile not found" });
+      }
+      
+      const row = result.rows[0];
+      const provider = {
+        id: row.id,
+        userId: row.user_id,
+        categoryId: row.category_id,
+        bio: row.bio,
+        hourlyRate: row.hourly_rate,
+        yearsOfExperience: row.years_of_experience,
+        availability: row.availability,
+        rating: row.rating,
+        completedJobs: row.completed_jobs,
+        verificationStatus: row.verification_status,
+        verifiedBy: row.verified_by,
+        verifiedAt: row.verified_at,
+        rejectionReason: row.rejection_reason,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
+      };
+      
+      console.log('Sending provider data:', provider);
+      res.json(provider);
+    } catch (error) {
+      const err = error as Error;
+      console.error('Database error in /api/providers/me:', err);
+      console.error('Error stack:', err.stack);
+      res.status(500).json({ message: "Database error", error: err.message });
+    }
+  });
+
+  // Update current user's service provider profile
+  app.put("/api/providers/me", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+    
+    try {
+      const { categoryId, hourlyRate, bio, experience } = req.body;
+      
+      // Validate required fields
+      if (!categoryId || !hourlyRate || !bio) {
+        return res.status(400).json({ message: "Category, hourly rate, and bio are required" });
+      }
+      
+      const serviceProvider = await storage.getServiceProviderByUserId(req.user.id);
+      if (!serviceProvider) {
+        return res.status(404).json({ message: "Service provider profile not found" });
+      }
+      
+      const updatedProvider = await storage.updateServiceProvider(serviceProvider.id, {
+        categoryId: parseInt(categoryId),
+        hourlyRate: parseFloat(hourlyRate),
+        bio,
+        yearsOfExperience: experience ? parseInt(experience) : null
+      });
+      
+      res.json(updatedProvider);
+    } catch (error) {
+      console.error('Error updating service provider profile:', error);
+      res.status(500).json({ message: "Failed to update service provider profile" });
+    }
+  });
   
   app.get("/api/providers/:id", async (req, res) => {
     try {
@@ -886,40 +970,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Get current user's service provider profile
   app.get("/api/providers/me", async (req, res) => {
+    console.log('=== /api/providers/me route hit ===');
+    console.log('req.isAuthenticated():', req.isAuthenticated());
+    console.log('req.user:', req.user);
+    
     if (!req.isAuthenticated()) {
+      console.log('Authentication failed');
       return res.status(401).json({ message: "You must be logged in" });
     }
     
     try {
-      // Use raw SQL query that we know works
+      console.log('Fetching provider for user ID:', req.user.id);
       const result = await pool.query('SELECT * FROM service_providers WHERE user_id = $1', [req.user.id]);
+      console.log('Raw SQL result rows count:', result.rows.length);
+      console.log('Raw SQL result:', result.rows);
       
       if (result.rows.length === 0) {
+        console.log('No provider found for user ID:', req.user.id);
         return res.status(404).json({ message: "Service provider profile not found" });
       }
       
-      // Convert to expected format
+      const row = result.rows[0];
       const provider = {
-        id: result.rows[0].id,
-        userId: result.rows[0].user_id,
-        categoryId: result.rows[0].category_id,
-        bio: result.rows[0].bio,
-        hourlyRate: result.rows[0].hourly_rate,
-        yearsOfExperience: result.rows[0].years_of_experience,
-        availability: result.rows[0].availability,
-        rating: result.rows[0].rating,
-        completedJobs: result.rows[0].completed_jobs,
-        verificationStatus: result.rows[0].verification_status,
-        verifiedBy: result.rows[0].verified_by,
-        verifiedAt: result.rows[0].verified_at,
-        rejectionReason: result.rows[0].rejection_reason,
-        createdAt: result.rows[0].created_at,
-        updatedAt: result.rows[0].updated_at
+        id: row.id,
+        userId: row.user_id,
+        categoryId: row.category_id,
+        bio: row.bio,
+        hourlyRate: row.hourly_rate,
+        yearsOfExperience: row.years_of_experience,
+        availability: row.availability,
+        rating: row.rating,
+        completedJobs: row.completed_jobs,
+        verificationStatus: row.verification_status,
+        verifiedBy: row.verified_by,
+        verifiedAt: row.verified_at,
+        rejectionReason: row.rejection_reason,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
       };
       
+      console.log('Sending provider data:', provider);
       res.json(provider);
     } catch (error) {
       const err = error as Error;
+      console.error('Database error in /api/providers/me:', err);
+      console.error('Error stack:', err.stack);
       res.status(500).json({ message: "Database error", error: err.message });
     }
   });

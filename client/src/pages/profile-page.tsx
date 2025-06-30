@@ -43,7 +43,7 @@ export default function ProfilePage() {
   const [activeTab, setActiveTab] = useState("general");
 
   // Fetch user profile data
-  const { data: userProfile, isLoading: userLoading } = useQuery({
+  const { data: userData, isLoading: userLoading } = useQuery({
     queryKey: ["/api/user"],
   });
 
@@ -55,17 +55,17 @@ export default function ProfilePage() {
   // Fetch provider profile if user is a service provider
   const { data: providerProfile, isLoading: providerLoading } = useQuery({
     queryKey: ["/api/providers/me"],
-    enabled: user?.role === "service_provider",
+    enabled: true, // Temporarily always enabled for debugging
   });
 
   // Profile form
   const profileForm = useForm<ProfileFormValues>({
     resolver: zodResolver(profileSchema),
     defaultValues: {
-      firstName: userProfile?.firstName || "",
-      lastName: userProfile?.lastName || "",
-      email: userProfile?.email || "",
-      phoneNumber: userProfile?.phoneNumber || "",
+      firstName: userData?.firstName || "",
+      lastName: userData?.lastName || "",
+      email: userData?.email || "",
+      phoneNumber: userData?.phoneNumber || "",
     },
   });
 
@@ -134,15 +134,15 @@ export default function ProfilePage() {
 
   // Update form default values when data loads using useEffect
   useEffect(() => {
-    if (userProfile) {
+    if (userData) {
       profileForm.reset({
-        firstName: userProfile.firstName || "",
-        lastName: userProfile.lastName || "",
-        email: userProfile.email || "",
-        phoneNumber: userProfile.phoneNumber || "",
+        firstName: userData.firstName || "",
+        lastName: userData.lastName || "",
+        email: userData.email || "",
+        phoneNumber: userData.phoneNumber || "",
       });
     }
-  }, [userProfile?.firstName, userProfile?.lastName, userProfile?.email, userProfile?.phoneNumber]);
+  }, [userData?.firstName, userData?.lastName, userData?.email, userData?.phoneNumber]);
 
   useEffect(() => {
     if (providerProfile) {
@@ -150,10 +150,10 @@ export default function ProfilePage() {
         categoryId: providerProfile.categoryId || 0,
         hourlyRate: providerProfile.hourlyRate || 0,
         bio: providerProfile.bio || "",
-        experience: providerProfile.experience || "",
+        experience: providerProfile.yearsOfExperience || "",
       });
     }
-  }, [providerProfile?.categoryId, providerProfile?.hourlyRate, providerProfile?.bio, providerProfile?.experience]);
+  }, [providerProfile?.categoryId, providerProfile?.hourlyRate, providerProfile?.bio, providerProfile?.yearsOfExperience]);
 
   if (userLoading) {
     return (
@@ -231,7 +231,7 @@ export default function ProfilePage() {
                       {/* Profile Picture Upload */}
                       <div className="flex justify-center mb-6">
                         <ProfilePictureUpload
-                          currentPicture={userProfile?.profilePicture}
+                          currentPicture={userData?.profilePicture}
                           onPictureChange={async (pictureUrl) => {
                             try {
                               const res = await apiRequest("PUT", "/api/user/profile-picture", {
@@ -247,7 +247,7 @@ export default function ProfilePage() {
                               });
                             }
                           }}
-                          userName={`${userProfile?.firstName || ''} ${userProfile?.lastName || ''}`}
+                          userName={`${userData?.firstName || ''} ${userData?.lastName || ''}`}
                         />
                       </div>
                       
