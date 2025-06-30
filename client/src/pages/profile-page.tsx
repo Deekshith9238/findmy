@@ -460,13 +460,24 @@ export default function ProfilePage() {
 
               {user?.role === "service_provider" && (
                 <TabsContent value="documents" className="mt-0">
-                  {providerProfile ? (
+                  {providerLoading ? (
+                    <Card>
+                      <CardContent className="p-6">
+                        <div className="flex justify-center py-8">
+                          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ) : providerProfile ? (
                     <DocumentVerification providerId={providerProfile.id} />
                   ) : (
                     <Card>
                       <CardContent className="p-6">
                         <div className="text-center text-gray-500">
                           Please complete your provider profile first to access document verification.
+                          <div className="mt-2 text-xs text-gray-400">
+                            Debug: Provider Profile Data: {JSON.stringify(providerProfile)}
+                          </div>
                         </div>
                       </CardContent>
                     </Card>
