@@ -192,6 +192,8 @@ Changelog:
 - June 30, 2025. Fixed tour navigation issue where it would show blank screen after 3rd step
 - June 30, 2025. Implemented dynamic step filtering based on user login status for onboarding walkthrough
 - June 30, 2025. Added improved positioning and error handling for tour tooltips and character placement
+- June 30, 2025. Implemented automatic scrolling to target sections during tour navigation for better visibility
+- June 30, 2025. Enhanced tour transitions with smooth scrolling and proper timing for element detection
 ```
 
 ## User Preferences

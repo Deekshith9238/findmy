@@ -195,36 +195,57 @@ export default function OnboardingWalkthrough({ isOpen, onComplete, onSkip }: On
   const step = availableSteps[currentStep];
 
   useEffect(() => {
-    if (!isOpen || !step?.target) {
+    if (!isOpen) {
       setTargetElement(null);
       setCharacterPosition(undefined);
       return;
     }
 
-    // Add a small delay to ensure DOM is ready
-    const timeout = setTimeout(() => {
-      const element = document.querySelector(`[data-onboarding="${step.target}"]`) as HTMLElement;
-      setTargetElement(element);
+    // For center-positioned steps (like welcome and complete), scroll to top
+    if (!step?.target || step.position === 'center') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      setTargetElement(null);
+      setCharacterPosition(undefined);
+      return;
+    }
 
+    // Function to find and scroll to target element
+    const findAndScrollToTarget = () => {
+      const element = document.querySelector(`[data-onboarding="${step.target}"]`) as HTMLElement;
+      
       if (element) {
-        // Calculate character position relative to target
-        const rect = element.getBoundingClientRect();
-        const characterX = rect.left + rect.width / 2;
-        const characterY = step.position === 'top' ? rect.top - 100 : rect.bottom + 20;
-        setCharacterPosition({ x: characterX, y: characterY });
+        // Auto-scroll to the target element
+        element.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'center',
+          inline: 'center'
+        });
+        
+        // Wait for scroll to complete, then set target
+        setTimeout(() => {
+          setTargetElement(element);
+          const rect = element.getBoundingClientRect();
+          const characterX = rect.left + rect.width / 2;
+          const characterY = step.position === 'top' ? rect.top - 100 : rect.bottom + 20;
+          setCharacterPosition({ x: characterX, y: characterY });
+        }, 600); // Wait for smooth scroll to complete
       } else if (step.target) {
-        // If target element is not found, scroll to find it or skip to next step
+        // If target element is not found, try alternative selectors and scroll
         console.warn(`Target element [data-onboarding="${step.target}"] not found`);
-        // Try scrolling to reveal the element
         const scrollTarget = document.getElementById(step.target) || 
                            document.querySelector(`#${step.target}`) ||
                            document.querySelector(`[data-testid="${step.target}"]`);
         
         if (scrollTarget) {
-          scrollTarget.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          scrollTarget.scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'center',
+            inline: 'center'
+          });
+          
           // Retry after scroll with multiple attempts
           let retryCount = 0;
-          const maxRetries = 5;
+          const maxRetries = 8;
           const retryInterval = setInterval(() => {
             retryCount++;
             const retryElement = document.querySelector(`[data-onboarding="${step.target}"]`) as HTMLElement;
@@ -240,10 +261,13 @@ export default function OnboardingWalkthrough({ isOpen, onComplete, onSkip }: On
               console.warn(`Could not find target element after ${maxRetries} retries`);
               clearInterval(retryInterval);
             }
-          }, 200);
+          }, 300);
         }
       }
-    }, 100);
+    };
+
+    // Add a small delay to ensure DOM is ready, then find and scroll to target
+    const timeout = setTimeout(findAndScrollToTarget, 150);
 
     return () => clearTimeout(timeout);
   }, [currentStep, step?.target, isOpen]);
