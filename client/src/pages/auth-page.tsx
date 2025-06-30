@@ -71,11 +71,12 @@ interface AuthPageProps {
   isModal?: boolean;
   onClose?: () => void;
   defaultToProvider?: boolean;
+  defaultTab?: 'login' | 'register';
 }
 
-function AuthPage({ isModal = false, onClose, defaultToProvider = false }: AuthPageProps) {
+function AuthPage({ isModal = false, onClose, defaultToProvider = false, defaultTab = "login" }: AuthPageProps) {
   const { user, loginMutation, registerMutation } = useAuth();
-  const [activeTab, setActiveTab] = useState<string>(defaultToProvider ? "register" : "login");
+  const [activeTab, setActiveTab] = useState<string>(defaultTab || (defaultToProvider ? "register" : "login"));
   const [accountType, setAccountType] = useState<string>(defaultToProvider ? "provider" : "client");
   const { toast } = useToast();
   
@@ -120,12 +121,12 @@ function AuthPage({ isModal = false, onClose, defaultToProvider = false }: AuthP
 
   // Handle register form submission
   function onRegisterSubmit(values: RegisterFormValues) {
-    const userData = {
-      ...values,
+    const { confirmPassword, ...userData } = values;
+    const finalData = {
+      ...userData,
       role: values.isServiceProvider ? "service_provider" : "client",
     };
-    delete (userData as any).confirmPassword;
-    registerMutation.mutate(userData);
+    registerMutation.mutate(finalData as any);
   }
 
   // Handle account type change

@@ -97,6 +97,8 @@ export function setupAuth(app: Express) {
 
   app.post("/api/register", async (req, res, next) => {
     try {
+      console.log("Registration request body:", req.body);
+      
       // Validate the registration data
       const validatedData = registerSchema.parse(req.body);
       
@@ -149,11 +151,13 @@ export function setupAuth(app: Express) {
       });
     } catch (err) {
       if (err instanceof z.ZodError) {
+        console.error("Registration validation error:", err.errors);
         return res.status(400).json({ 
           message: "Validation error", 
           errors: err.errors 
         });
       }
+      console.error("Registration error:", err);
       next(err);
     }
   });

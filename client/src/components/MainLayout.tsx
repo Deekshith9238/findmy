@@ -21,6 +21,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
   const [location] = useLocation();
   const { user, logoutMutation, isProvider, isAdmin } = useAuth();
   const [authDialogOpen, setAuthDialogOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const handleLogout = () => {
@@ -109,13 +110,19 @@ export default function MainLayout({ children }: MainLayoutProps) {
                 <Button
                   variant="outline"
                   className="hidden md:block"
-                  onClick={() => setAuthDialogOpen(true)}
+                  onClick={() => {
+                    setAuthMode('login');
+                    setAuthDialogOpen(true);
+                  }}
                 >
                   Log in
                 </Button>
                 <Button
                   className="hidden md:block"
-                  onClick={() => setAuthDialogOpen(true)}
+                  onClick={() => {
+                    setAuthMode('register');
+                    setAuthDialogOpen(true);
+                  }}
                 >
                   Sign up
                 </Button>
@@ -173,6 +180,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
                       <Button 
                         variant="outline" 
                         onClick={() => {
+                          setAuthMode('login');
                           setAuthDialogOpen(true);
                           setMobileMenuOpen(false);
                         }}
@@ -181,6 +189,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
                       </Button>
                       <Button 
                         onClick={() => {
+                          setAuthMode('register');
                           setAuthDialogOpen(true);
                           setMobileMenuOpen(false);
                         }}
@@ -209,7 +218,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
         <DialogContent className="sm:max-w-[425px] p-0 max-h-[90vh] overflow-y-auto">
           <DialogTitle className="sr-only">Authentication</DialogTitle>
           <DialogDescription className="sr-only">Sign in or create your account</DialogDescription>
-          <AuthPage isModal={true} onClose={closeDialog} />
+          <AuthPage isModal={true} onClose={closeDialog} defaultTab={authMode} />
         </DialogContent>
       </Dialog>
     </div>
