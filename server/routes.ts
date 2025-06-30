@@ -4,12 +4,17 @@ import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
 import { setupAuth } from "./auth";
 import { z } from "zod";
+import multer from "multer";
+import path from "path";
+import fs from "fs/promises";
+import express from "express";
 import { 
   insertTaskSchema, 
   insertServiceRequestSchema,
   insertReviewSchema,
   insertUserSchema,
-  insertNotificationSchema
+  insertNotificationSchema,
+  insertServiceProviderDocumentSchema
 } from "@shared/schema";
 import type { Request, Response, NextFunction } from "express";
 
@@ -29,6 +34,143 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
 export async function registerRoutes(app: Express): Promise<Server> {
   // Set up authentication routes
   setupAuth(app);
+
+  // Create uploads directory if it doesn't exist
+  const uploadsDir = path.join(process.cwd(), 'uploads');
+  await fs.mkdir(uploadsDir, { recursive: true });
+  await fs.mkdir(path.join(uploadsDir, 'profile-pictures'), { recursive: true });
+  await fs.mkdir(path.join(uploadsDir, 'documents'), { recursive: true });
+
+  // Configure multer for file uploads
+  const storage_config = multer.diskStorage({
+    destination: (req, file, cb) => {
+      if (req.path.includes('profile-picture')) {
+        cb(null, path.join(uploadsDir, 'profile-pictures'));
+      } else {
+        cb(null, path.join(uploadsDir, 'documents'));
+      }
+    },
+    filename: (req, file, cb) => {
+      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+      cb(null, uniqueSuffix + path.extname(file.originalname));
+    }
+  });
+
+  const upload = multer({ 
+    storage: storage_config,
+    limits: {
+      fileSize: 10 * 1024 * 1024 // 10MB limit
+    },
+    fileFilter: (req, file, cb) => {
+      if (req.path.includes('profile-picture')) {
+        if (file.mimetype.startsWith('image/')) {
+          cb(null, true);
+        } else {
+          cb(new Error('Only image files are allowed for profile pictures'));
+        }
+      } else {
+        // For documents, allow images and PDFs
+        if (file.mimetype.startsWith('image/') || file.mimetype === 'application/pdf') {
+          cb(null, true);
+        } else {
+          cb(new Error('Only image and PDF files are allowed for documents'));
+        }
+      }
+    }
+  });
+
+  // Serve uploaded files statically
+  app.use('/uploads', (req, res, next) => {
+    // Add security headers for file serving
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    next();
+  });
+  app.use('/uploads', express.static(uploadsDir));
+
+  // Authentication middleware for file uploads
+  const requireAuth = (req: any, res: Response, next: NextFunction) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    next();
+  };
+
+  // Profile picture upload endpoint
+  app.post('/api/user/profile-picture', requireAuth, upload.single('profilePicture'), async (req: any, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: 'No file uploaded' });
+      }
+
+      const profilePictureUrl = `/uploads/profile-pictures/${req.file.filename}`;
+      
+      // Update user profile with new picture URL
+      const updatedUser = await storage.updateUser(req.user.id, {
+        profilePicture: profilePictureUrl
+      });
+
+      if (!updatedUser) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+
+      res.json({ profilePicture: profilePictureUrl });
+    } catch (error) {
+      console.error('Profile picture upload error:', error);
+      res.status(500).json({ message: 'Failed to upload profile picture' });
+    }
+  });
+
+  // Document upload endpoint for service providers
+  app.post('/api/provider/documents', requireAuth, upload.single('document'), async (req: any, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: 'No file uploaded' });
+      }
+
+      const { documentType } = req.body;
+      if (!documentType) {
+        return res.status(400).json({ message: 'Document type is required' });
+      }
+
+      // Check if user is a service provider
+      const provider = await storage.getServiceProviderByUserId(req.user.id);
+      if (!provider) {
+        return res.status(403).json({ message: 'Only service providers can upload documents' });
+      }
+
+      const documentUrl = `/uploads/documents/${req.file.filename}`;
+      
+      // Create document record
+      const document = await storage.createServiceProviderDocument({
+        providerId: provider.id,
+        documentType,
+        documentUrl,
+        originalName: req.file.originalname,
+        verificationStatus: 'pending',
+        notes: null
+      });
+
+      res.json(document);
+    } catch (error) {
+      console.error('Document upload error:', error);
+      res.status(500).json({ message: 'Failed to upload document' });
+    }
+  });
+
+  // Get provider documents endpoint
+  app.get('/api/provider/documents', requireAuth, async (req: any, res) => {
+    try {
+      // Check if user is a service provider
+      const provider = await storage.getServiceProviderByUserId(req.user.id);
+      if (!provider) {
+        return res.status(403).json({ message: 'Only service providers can view documents' });
+      }
+
+      const documents = await storage.getServiceProviderDocuments(provider.id);
+      res.json(documents);
+    } catch (error) {
+      console.error('Get documents error:', error);
+      res.status(500).json({ message: 'Failed to fetch documents' });
+    }
+  });
 
   // Service categories routes
   app.get("/api/categories", async (_req, res) => {
@@ -79,8 +221,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         })
       );
       
-      // Filter out null results
-      res.json(providersWithDetails.filter(p => p !== null));
+      // Filter out null results and only return verified providers
+      const verifiedProviders = providersWithDetails.filter(p => 
+        p !== null && p.verificationStatus === 'approved'
+      );
+      
+      res.json(verifiedProviders);
     } catch (err) {
       res.status(500).json({ message: "Failed to fetch service providers" });
     }
@@ -845,6 +991,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         clientId: req.user.id,
         status: 'assigned_to_call_center' // Auto-assign to call center
       });
+      
+      // Check if provider is verified before allowing request
+      if (requestData.providerId) {
+        const provider = await storage.getServiceProvider(requestData.providerId);
+        if (!provider) {
+          return res.status(404).json({ message: "Service provider not found" });
+        }
+        
+        if (provider.verificationStatus !== 'approved') {
+          return res.status(403).json({ 
+            message: "This service provider is not yet verified. Only verified providers can accept service requests." 
+          });
+        }
+      }
       
       const serviceRequest = await storage.createServiceRequest(requestData);
       
