@@ -197,6 +197,7 @@ export default function OnboardingWalkthrough({ isOpen, onComplete, onSkip }: On
   useEffect(() => {
     if (!isOpen || !step?.target) {
       setTargetElement(null);
+      setCharacterPosition(undefined);
       return;
     }
 
@@ -211,6 +212,28 @@ export default function OnboardingWalkthrough({ isOpen, onComplete, onSkip }: On
         const characterX = rect.left + rect.width / 2;
         const characterY = step.position === 'top' ? rect.top - 100 : rect.bottom + 20;
         setCharacterPosition({ x: characterX, y: characterY });
+      } else if (step.target) {
+        // If target element is not found, scroll to find it or skip to next step
+        console.warn(`Target element [data-onboarding="${step.target}"] not found`);
+        // Try scrolling to reveal the element
+        const scrollTarget = document.getElementById(step.target) || 
+                           document.querySelector(`#${step.target}`) ||
+                           document.querySelector(`[data-testid="${step.target}"]`);
+        
+        if (scrollTarget) {
+          scrollTarget.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          // Retry after scroll
+          setTimeout(() => {
+            const retryElement = document.querySelector(`[data-onboarding="${step.target}"]`) as HTMLElement;
+            setTargetElement(retryElement);
+            if (retryElement) {
+              const rect = retryElement.getBoundingClientRect();
+              const characterX = rect.left + rect.width / 2;
+              const characterY = step.position === 'top' ? rect.top - 100 : rect.bottom + 20;
+              setCharacterPosition({ x: characterX, y: characterY });
+            }
+          }, 500);
+        }
       }
     }, 100);
 
@@ -232,44 +255,68 @@ export default function OnboardingWalkthrough({ isOpen, onComplete, onSkip }: On
   };
 
   const getTooltipPosition = () => {
-    if (!targetElement) return { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' };
+    // Default center position for steps without targets or when target is not found
+    if (!targetElement || !step?.position) {
+      return { 
+        top: '50%', 
+        left: '50%', 
+        transform: 'translate(-50%, -50%)',
+        position: 'fixed' as const
+      };
+    }
 
     const rect = targetElement.getBoundingClientRect();
     const tooltipWidth = 384;
     const tooltipHeight = 200;
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
 
+    // Calculate base position
+    let basePosition;
     switch (step.position) {
       case 'top':
-        return {
+        basePosition = {
           top: rect.top - tooltipHeight - 20,
           left: rect.left + rect.width / 2 - tooltipWidth / 2,
-          transform: 'none'
         };
+        break;
       case 'bottom':
-        return {
+        basePosition = {
           top: rect.bottom + 20,
           left: rect.left + rect.width / 2 - tooltipWidth / 2,
-          transform: 'none'
         };
+        break;
       case 'left':
-        return {
+        basePosition = {
           top: rect.top + rect.height / 2 - tooltipHeight / 2,
           left: rect.left - tooltipWidth - 20,
-          transform: 'none'
         };
+        break;
       case 'right':
-        return {
+        basePosition = {
           top: rect.top + rect.height / 2 - tooltipHeight / 2,
           left: rect.right + 20,
-          transform: 'none'
         };
+        break;
       default:
         return {
           top: '50%',
           left: '50%',
-          transform: 'translate(-50%, -50%)'
+          transform: 'translate(-50%, -50%)',
+          position: 'fixed' as const
         };
     }
+
+    // Adjust for viewport boundaries
+    const adjustedLeft = Math.max(20, Math.min(basePosition.left, viewportWidth - tooltipWidth - 20));
+    const adjustedTop = Math.max(20, Math.min(basePosition.top, viewportHeight - tooltipHeight - 20));
+
+    return {
+      top: adjustedTop,
+      left: adjustedLeft,
+      transform: 'none',
+      position: 'fixed' as const
+    };
   };
 
   if (!isOpen || !step) return null;
@@ -305,7 +352,7 @@ export default function OnboardingWalkthrough({ isOpen, onComplete, onSkip }: On
         {/* Character */}
         <Character 
           message={step.characterMessage} 
-          position={step.position === 'center' ? undefined : characterPosition}
+          position={step.position === 'center' || !targetElement ? undefined : characterPosition}
         />
 
         {/* Tooltip */}

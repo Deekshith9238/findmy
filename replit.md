@@ -189,6 +189,9 @@ Changelog:
 - June 29, 2025. Built mobile app screens including Home, Services, Tasks, Map, Profile, and notification management
 - June 29, 2025. Implemented mobile API integration with secure token storage and HTTP client configuration
 - June 29, 2025. Added mobile-specific features: GPS location tracking, push notifications, and offline data caching
+- June 30, 2025. Fixed tour navigation issue where it would show blank screen after 3rd step
+- June 30, 2025. Implemented dynamic step filtering based on user login status for onboarding walkthrough
+- June 30, 2025. Added improved positioning and error handling for tour tooltips and character placement
 ```
 
 ## User Preferences
