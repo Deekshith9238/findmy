@@ -581,18 +581,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     try {
       const { profilePicture } = req.body;
+      console.log('Profile picture update request for user:', req.user.id);
+      console.log('Profile picture data length:', profilePicture ? profilePicture.length : 0);
       
       const updatedUser = await storage.updateUser(req.user.id, {
         profilePicture: profilePicture || null
       });
       
       if (!updatedUser) {
+        console.log('User not found during profile picture update:', req.user.id);
         return res.status(404).json({ message: "User not found" });
       }
       
+      console.log('Profile picture updated successfully for user:', req.user.id);
       res.json(updatedUser);
     } catch (err) {
-      res.status(500).json({ message: "Failed to update profile picture" });
+      const error = err as Error;
+      console.error('Error updating profile picture:', error.message);
+      console.error('Error stack:', error.stack);
+      res.status(500).json({ message: "Failed to update profile picture", error: error.message });
     }
   });
 

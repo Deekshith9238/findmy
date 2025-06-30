@@ -9,9 +9,13 @@ export interface UploadResult {
 
 export async function uploadFile(file: File, type: 'profile' | 'document'): Promise<UploadResult> {
   try {
-    // Validate file size (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      return { success: false, error: 'File size too large. Maximum 5MB allowed.' };
+    // Validate file size - stricter limit for profile pictures due to base64 encoding
+    const maxSize = type === 'profile' ? 2 * 1024 * 1024 : 5 * 1024 * 1024; // 2MB for profile, 5MB for documents
+    if (file.size > maxSize) {
+      return { 
+        success: false, 
+        error: `File size too large. Maximum ${maxSize / (1024 * 1024)}MB allowed for ${type} pictures.` 
+      };
     }
 
     // Validate file type
