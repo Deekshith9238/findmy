@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -132,24 +132,28 @@ export default function ProfilePage() {
     updateProviderMutation.mutate(values);
   }
 
-  // Update form default values when data loads
-  if (userProfile && !profileForm.formState.isDirty) {
-    profileForm.reset({
-      firstName: userProfile.firstName || "",
-      lastName: userProfile.lastName || "",
-      email: userProfile.email || "",
-      phoneNumber: userProfile.phoneNumber || "",
-    });
-  }
+  // Update form default values when data loads using useEffect
+  useEffect(() => {
+    if (userProfile) {
+      profileForm.reset({
+        firstName: userProfile.firstName || "",
+        lastName: userProfile.lastName || "",
+        email: userProfile.email || "",
+        phoneNumber: userProfile.phoneNumber || "",
+      });
+    }
+  }, [userProfile?.firstName, userProfile?.lastName, userProfile?.email, userProfile?.phoneNumber]);
 
-  if (providerProfile && !providerForm.formState.isDirty) {
-    providerForm.reset({
-      categoryId: providerProfile.categoryId || 0,
-      hourlyRate: providerProfile.hourlyRate || 0,
-      bio: providerProfile.bio || "",
-      experience: providerProfile.experience || "",
-    });
-  }
+  useEffect(() => {
+    if (providerProfile) {
+      providerForm.reset({
+        categoryId: providerProfile.categoryId || 0,
+        hourlyRate: providerProfile.hourlyRate || 0,
+        bio: providerProfile.bio || "",
+        experience: providerProfile.experience || "",
+      });
+    }
+  }, [providerProfile?.categoryId, providerProfile?.hourlyRate, providerProfile?.bio, providerProfile?.experience]);
 
   if (userLoading) {
     return (
