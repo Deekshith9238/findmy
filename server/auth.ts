@@ -30,13 +30,15 @@ async function comparePasswords(supplied: string, stored: string) {
   return timingSafeEqual(hashedBuf, suppliedBuf);
 }
 
-// Schema for user registration
+// Schema for user registration (backend only - confirmPassword validation happens on frontend)
 const registerSchema = insertUserSchema.extend({
   isServiceProvider: z.boolean(),
-  confirmPassword: z.string()
-}).refine(data => data.password === data.confirmPassword, {
-  message: "Passwords do not match",
-  path: ["confirmPassword"]
+  // Service provider fields (optional, validated separately)
+  categoryId: z.number().optional(),
+  hourlyRate: z.number().optional(),
+  bio: z.string().optional(),
+  yearsOfExperience: z.number().optional(),
+  availability: z.string().optional(),
 });
 
 // Schema for service provider additional info
@@ -120,18 +122,23 @@ export function setupAuth(app: Express) {
         password: await hashPassword(validatedData.password)
       });
       
-      // If user is a service provider, validate and create service provider profile
+      // If user is a service provider, create service provider profile
       if (validatedData.isServiceProvider) {
         try {
-          const providerData = providerExtendedSchema.parse(req.body);
+          // Validate required provider fields
+          if (!validatedData.categoryId || !validatedData.hourlyRate) {
+            return res.status(400).json({ 
+              message: "Category and hourly rate are required for service providers" 
+            });
+          }
           
           await storage.createServiceProvider({
             userId: user.id,
-            categoryId: providerData.categoryId,
-            hourlyRate: providerData.hourlyRate,
-            bio: providerData.bio || "",
-            yearsOfExperience: providerData.yearsOfExperience || 0,
-            availability: providerData.availability || ""
+            categoryId: validatedData.categoryId,
+            hourlyRate: validatedData.hourlyRate,
+            bio: validatedData.bio || "",
+            yearsOfExperience: validatedData.yearsOfExperience || 0,
+            availability: validatedData.availability || ""
           });
         } catch (err) {
           // If service provider profile creation fails, still let the user register
