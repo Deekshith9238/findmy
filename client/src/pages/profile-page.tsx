@@ -73,10 +73,10 @@ export default function ProfilePage() {
   const providerForm = useForm<ProviderProfileFormValues>({
     resolver: zodResolver(providerProfileSchema),
     defaultValues: {
-      categoryId: providerProfile?.categoryId || 0,
-      hourlyRate: providerProfile?.hourlyRate || 0,
-      bio: providerProfile?.bio || "",
-      experience: providerProfile?.experience || "",
+      categoryId: 0,
+      hourlyRate: 0,
+      bio: "",
+      experience: "",
     },
   });
 
