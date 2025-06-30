@@ -183,10 +183,19 @@ export default function OnboardingWalkthrough({ isOpen, onComplete, onSkip }: On
   const [characterPosition, setCharacterPosition] = useState<{ x: number; y: number } | undefined>();
   const { user } = useAuth();
 
-  const step = onboardingSteps[currentStep];
+  // Filter steps based on user login status
+  const availableSteps = onboardingSteps.filter(step => {
+    // Skip notifications step if user is not logged in (since notifications only appear when logged in)
+    if (step.id === 'notifications' && !user) {
+      return false;
+    }
+    return true;
+  });
+
+  const step = availableSteps[currentStep];
 
   useEffect(() => {
-    if (!isOpen || !step.target) {
+    if (!isOpen || !step?.target) {
       setTargetElement(null);
       return;
     }
@@ -206,10 +215,10 @@ export default function OnboardingWalkthrough({ isOpen, onComplete, onSkip }: On
     }, 100);
 
     return () => clearTimeout(timeout);
-  }, [currentStep, step.target, isOpen]);
+  }, [currentStep, step?.target, isOpen]);
 
   const nextStep = () => {
-    if (currentStep < onboardingSteps.length - 1) {
+    if (currentStep < availableSteps.length - 1) {
       setCurrentStep(currentStep + 1);
     } else {
       onComplete();
@@ -263,7 +272,7 @@ export default function OnboardingWalkthrough({ isOpen, onComplete, onSkip }: On
     }
   };
 
-  if (!isOpen) return null;
+  if (!isOpen || !step) return null;
 
   return (
     <AnimatePresence>
@@ -337,14 +346,14 @@ export default function OnboardingWalkthrough({ isOpen, onComplete, onSkip }: On
               {/* Progress */}
               <div className="mb-6">
                 <div className="flex justify-between text-sm text-gray-500 mb-2">
-                  <span>Step {currentStep + 1} of {onboardingSteps.length}</span>
-                  <span>{Math.round(((currentStep + 1) / onboardingSteps.length) * 100)}%</span>
+                  <span>Step {currentStep + 1} of {availableSteps.length}</span>
+                  <span>{Math.round(((currentStep + 1) / availableSteps.length) * 100)}%</span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
                   <motion.div
                     className="bg-primary h-2 rounded-full"
                     initial={{ width: 0 }}
-                    animate={{ width: `${((currentStep + 1) / onboardingSteps.length) * 100}%` }}
+                    animate={{ width: `${((currentStep + 1) / availableSteps.length) * 100}%` }}
                     transition={{ duration: 0.5 }}
                   />
                 </div>
@@ -374,8 +383,8 @@ export default function OnboardingWalkthrough({ isOpen, onComplete, onSkip }: On
                     onClick={nextStep}
                     className="flex items-center space-x-2"
                   >
-                    <span>{currentStep === onboardingSteps.length - 1 ? 'Get Started' : 'Next'}</span>
-                    {currentStep === onboardingSteps.length - 1 ? (
+                    <span>{currentStep === availableSteps.length - 1 ? 'Get Started' : 'Next'}</span>
+                    {currentStep === availableSteps.length - 1 ? (
                       <Star className="w-4 h-4" />
                     ) : (
                       <ArrowRight className="w-4 h-4" />
