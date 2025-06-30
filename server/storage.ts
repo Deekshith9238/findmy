@@ -831,6 +831,7 @@ export class DatabaseStorage implements IStorage {
   // Location-based methods
   async getNearbyServiceProviders(latitude: number, longitude: number, radius: number, categoryId?: number): Promise<ServiceProvider[]> {
     // Using the Haversine formula for distance calculation
+    // Only include providers who have at least 2 approved documents (Government ID + Professional License)
     const query = `
       SELECT sp.*, u.latitude, u.longitude 
       FROM service_providers sp 
@@ -838,6 +839,12 @@ export class DatabaseStorage implements IStorage {
       WHERE u.latitude IS NOT NULL 
         AND u.longitude IS NOT NULL 
         AND (6371 * acos(cos(radians($1)) * cos(radians(u.latitude)) * cos(radians(u.longitude) - radians($2)) + sin(radians($1)) * sin(radians(u.latitude)))) <= $3
+        AND (
+          SELECT COUNT(*) 
+          FROM service_provider_documents spd 
+          WHERE spd.provider_id = sp.id 
+            AND spd.verification_status = 'approved'
+        ) >= 2
         ${categoryId ? 'AND sp.category_id = $4' : ''}
     `;
     

@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, User, Settings, BriefcaseBusiness, Bell } from "lucide-react";
+import { Loader2, User, Settings, BriefcaseBusiness, Bell, FileText } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -28,6 +28,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import ProfilePictureUpload from "@/components/ProfilePictureUpload";
+import DocumentVerification from "@/components/DocumentVerification";
 
 // Profile update schema
 const profileSchema = z.object({
@@ -64,7 +66,7 @@ export default function ProfilePage() {
   // Fetch provider profile if user is a service provider
   const { data: providerProfile, isLoading: providerLoading } = useQuery<any>({
     queryKey: ["/api/user/provider"],
-    enabled: !!user && user.isServiceProvider,
+    enabled: !!user && user.role === "service_provider",
   });
   
   // Fetch service categories for provider profile
@@ -269,6 +271,15 @@ export default function ProfilePage() {
                         <BriefcaseBusiness className="h-4 w-4 mr-2" />
                         Provider Settings
                       </TabsTrigger>
+                      {user?.role === "service_provider" && (
+                        <TabsTrigger
+                          value="documents"
+                          className="w-full justify-start px-3 py-2"
+                        >
+                          <FileText className="h-4 w-4 mr-2" />
+                          Document Verification
+                        </TabsTrigger>
+                      )}
                       <TabsTrigger
                         value="account"
                         className="w-full justify-start px-3 py-2"
@@ -290,9 +301,33 @@ export default function ProfilePage() {
                     <CardTitle>Profile Information</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <Form {...profileForm}>
-                      <form onSubmit={profileForm.handleSubmit(onSubmitProfile)} className="space-y-6">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-6">
+                      {/* Profile Picture Upload */}
+                      <div className="flex justify-center mb-6">
+                        <ProfilePictureUpload
+                          currentPicture={userProfile?.profilePicture}
+                          onPictureChange={async (pictureUrl) => {
+                            try {
+                              const res = await apiRequest("PUT", "/api/user/profile-picture", {
+                                profilePicture: pictureUrl
+                              });
+                              const updatedUser = await res.json();
+                              queryClient.setQueryData(["/api/user"], updatedUser);
+                            } catch (error) {
+                              toast({
+                                title: "Failed to update profile picture",
+                                description: "Please try again later",
+                                variant: "destructive",
+                              });
+                            }
+                          }}
+                          userName={`${userProfile?.firstName || ''} ${userProfile?.lastName || ''}`}
+                        />
+                      </div>
+                      
+                      <Form {...profileForm}>
+                        <form onSubmit={profileForm.handleSubmit(onSubmitProfile)} className="space-y-6">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <FormField
                             control={profileForm.control}
                             name="firstName"
@@ -350,19 +385,7 @@ export default function ProfilePage() {
                           )}
                         />
                         
-                        <FormField
-                          control={profileForm.control}
-                          name="profilePicture"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Profile Picture URL (Optional)</FormLabel>
-                              <FormControl>
-                                <Input {...field} />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
+
                         
                         <Button 
                           type="submit"
@@ -377,8 +400,9 @@ export default function ProfilePage() {
                             "Save Changes"
                           )}
                         </Button>
-                      </form>
-                    </Form>
+                        </form>
+                      </Form>
+                    </div>
                   </CardContent>
                 </Card>
               </TabsContent>
@@ -529,6 +553,22 @@ export default function ProfilePage() {
                   </CardContent>
                 </Card>
               </TabsContent>
+              
+              {user?.role === "service_provider" && (
+                <TabsContent value="documents" className="mt-0">
+                  {providerProfile ? (
+                    <DocumentVerification providerId={providerProfile.id} />
+                  ) : (
+                    <Card>
+                      <CardContent className="p-6">
+                        <div className="text-center text-gray-500">
+                          Please complete your provider profile first to access document verification.
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                </TabsContent>
+              )}
               
               <TabsContent value="account" className="mt-0">
                 <Card>

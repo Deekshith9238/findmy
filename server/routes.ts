@@ -486,6 +486,186 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Profile picture update route
+  app.put("/api/user/profile-picture", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+
+    try {
+      const { profilePicture } = req.body;
+      
+      const updatedUser = await storage.updateUser(req.user.id, {
+        profilePicture: profilePicture || null
+      });
+      
+      if (!updatedUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      res.json(updatedUser);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to update profile picture" });
+    }
+  });
+
+  // Get provider documents
+  app.get("/api/provider/documents/:providerId", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+
+    try {
+      const providerId = parseInt(req.params.providerId);
+      
+      // Check if user owns this provider profile or is admin/verifier
+      const provider = await storage.getServiceProvider(providerId);
+      if (!provider) {
+        return res.status(404).json({ message: "Provider not found" });
+      }
+      
+      if (provider.userId !== req.user.id && !['admin', 'service_verifier'].includes(req.user.role)) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      const documents = await storage.getServiceProviderDocuments(providerId);
+      res.json(documents);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch documents" });
+    }
+  });
+
+  // Upload provider document
+  app.post("/api/provider/documents", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+
+    try {
+      const { providerId, documentType, documentUrl, originalName } = req.body;
+      
+      // Check if user owns this provider profile
+      const provider = await storage.getServiceProvider(providerId);
+      if (!provider || provider.userId !== req.user.id) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      const document = await storage.createServiceProviderDocument({
+        providerId,
+        documentType,
+        documentUrl,
+        originalName,
+        verificationStatus: "pending"
+      });
+      
+      res.status(201).json(document);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to upload document" });
+    }
+  });
+
+  // Get provider documents (for current user)
+  app.get("/api/user/provider/documents", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+
+    try {
+      const provider = await storage.getServiceProviderByUserId(req.user.id);
+      if (!provider) {
+        return res.status(404).json({ message: "Provider profile not found" });
+      }
+      
+      const documents = await storage.getServiceProviderDocuments(provider.id);
+      res.json(documents);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch documents" });
+    }
+  });
+
+  // Document verification routes for admins and service verifiers
+  app.get("/api/admin/documents/pending", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+
+    if (!['admin', 'service_verifier'].includes(req.user.role)) {
+      return res.status(403).json({ message: "Access denied. Admin or service verifier role required." });
+    }
+
+    try {
+      const query = `
+        SELECT spd.*, sp.user_id, u.first_name, u.last_name, u.email, sp.bio
+        FROM service_provider_documents spd
+        JOIN service_providers sp ON spd.provider_id = sp.id
+        JOIN users u ON sp.user_id = u.id
+        WHERE spd.verification_status IN ('pending', 'under_review')
+        ORDER BY spd.uploaded_at ASC
+      `;
+      
+      const result = await pool.query(query);
+      res.json(result.rows);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch pending documents" });
+    }
+  });
+
+  // Verify or reject document
+  app.put("/api/admin/documents/:documentId/verify", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+
+    if (!['admin', 'service_verifier'].includes(req.user.role)) {
+      return res.status(403).json({ message: "Access denied. Admin or service verifier role required." });
+    }
+
+    try {
+      const documentId = parseInt(req.params.documentId);
+      const { status, notes } = req.body;
+
+      if (!['approved', 'rejected'].includes(status)) {
+        return res.status(400).json({ message: "Invalid status. Must be 'approved' or 'rejected'" });
+      }
+
+      const updatedDocument = await storage.updateServiceProviderDocument(documentId, {
+        verificationStatus: status,
+        verifiedBy: req.user.id,
+        verifiedAt: new Date(),
+        notes: notes || null
+      });
+
+      if (!updatedDocument) {
+        return res.status(404).json({ message: "Document not found" });
+      }
+
+      // Send notification to provider
+      const providerQuery = `
+        SELECT sp.user_id FROM service_provider_documents spd
+        JOIN service_providers sp ON spd.provider_id = sp.id
+        WHERE spd.id = $1
+      `;
+      const providerResult = await pool.query(providerQuery, [documentId]);
+      
+      if (providerResult.rows.length > 0) {
+        const providerId = providerResult.rows[0].user_id;
+        const notification = await storage.createNotification({
+          userId: providerId,
+          type: 'document_verification',
+          title: `Document ${status === 'approved' ? 'Approved' : 'Rejected'}`,
+          message: `Your ${updatedDocument.documentType} document has been ${status}. ${notes ? 'Notes: ' + notes : ''}`,
+          data: JSON.stringify({ documentId, status, notes })
+        });
+
+        await sendNotificationToUser(providerId, notification);
+      }
+
+      res.json(updatedDocument);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to verify document" });
+    }
+  });
+
   // Admin middleware
   const requireAdmin = (req: any, res: Response, next: NextFunction) => {
     if (!req.user || req.user.email !== 'findmyhelper2025@gmail.com') {
