@@ -54,7 +54,7 @@ export default function ProfilePage() {
 
   // Fetch provider profile if user is a service provider
   const { data: providerProfile, isLoading: providerLoading } = useQuery({
-    queryKey: ["/api/provider/profile"],
+    queryKey: ["/api/providers/me"],
     enabled: user?.role === "service_provider",
   });
 
@@ -105,7 +105,7 @@ export default function ProfilePage() {
   // Update provider profile mutation
   const updateProviderMutation = useMutation({
     mutationFn: async (data: ProviderProfileFormValues) => {
-      const res = await apiRequest("PUT", "/api/provider/profile", data);
+      const res = await apiRequest("PUT", "/api/providers/me", data);
       return res.json();
     },
     onSuccess: () => {
@@ -113,7 +113,7 @@ export default function ProfilePage() {
         title: "Provider profile updated successfully",
         description: "Your service provider information has been saved.",
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/provider/profile"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/providers/me"] });
     },
     onError: (error: Error) => {
       toast({

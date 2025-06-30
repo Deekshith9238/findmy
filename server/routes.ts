@@ -876,6 +876,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Update current user's service provider profile
+  app.put("/api/providers/me", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+    
+    try {
+      const { categoryId, hourlyRate, bio, experience } = req.body;
+      
+      // Validate required fields
+      if (!categoryId || !hourlyRate || !bio) {
+        return res.status(400).json({ message: "Category, hourly rate, and bio are required" });
+      }
+      
+      const serviceProvider = await storage.getServiceProviderByUserId(req.user.id);
+      if (!serviceProvider) {
+        return res.status(404).json({ message: "Service provider profile not found" });
+      }
+      
+      const updatedProvider = await storage.updateServiceProvider(serviceProvider.id, {
+        categoryId: parseInt(categoryId),
+        hourlyRate: parseFloat(hourlyRate),
+        bio,
+        experience: experience || null
+      });
+      
+      res.json(updatedProvider);
+    } catch (error) {
+      console.error('Error updating service provider profile:', error);
+      res.status(500).json({ message: "Failed to update service provider profile" });
+    }
+  });
+
   // Location-based service provider search
   app.get("/api/providers/nearby", async (req, res) => {
     try {
