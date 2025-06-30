@@ -1,0 +1,118 @@
+WebSocket connected
+3chunk-E7IAXTU4.js?v=2305319f:50 Uncaught Error: `TabsContent` must be used within `Tabs`
+    at useContext2 (chunk-E7IAXTU4.js?v=2305319f:50:13)
+    at @radix-ui_react-tabs.js?v=2305319f:174:21
+    at renderWithHooks (chunk-RPCDYKBN.js?v=2305319f:11548:26)
+    at updateForwardRef (chunk-RPCDYKBN.js?v=2305319f:14325:28)
+    at beginWork (chunk-RPCDYKBN.js?v=2305319f:15946:22)
+    at HTMLUnknownElement.callCallback2 (chunk-RPCDYKBN.js?v=2305319f:3674:22)
+    at Object.invokeGuardedCallbackDev (chunk-RPCDYKBN.js?v=2305319f:3699:24)
+    at invokeGuardedCallback (chunk-RPCDYKBN.js?v=2305319f:3733:39)
+    at beginWork$1 (chunk-RPCDYKBN.js?v=2305319f:19765:15)
+    at performUnitOfWork (chunk-RPCDYKBN.js?v=2305319f:19198:20)
+useContext2 @ chunk-E7IAXTU4.js?v=2305319f:50
+(anonymous) @ @radix-ui_react-tabs.js?v=2305319f:174
+renderWithHooks @ chunk-RPCDYKBN.js?v=2305319f:11548
+updateForwardRef @ chunk-RPCDYKBN.js?v=2305319f:14325
+beginWork @ chunk-RPCDYKBN.js?v=2305319f:15946
+callCallback2 @ chunk-RPCDYKBN.js?v=2305319f:3674
+invokeGuardedCallbackDev @ chunk-RPCDYKBN.js?v=2305319f:3699
+invokeGuardedCallback @ chunk-RPCDYKBN.js?v=2305319f:3733
+beginWork$1 @ chunk-RPCDYKBN.js?v=2305319f:19765
+performUnitOfWork @ chunk-RPCDYKBN.js?v=2305319f:19198
+workLoopSync @ chunk-RPCDYKBN.js?v=2305319f:19137
+renderRootSync @ chunk-RPCDYKBN.js?v=2305319f:19116
+performSyncWorkOnRoot @ chunk-RPCDYKBN.js?v=2305319f:18874
+flushSyncCallbacks @ chunk-RPCDYKBN.js?v=2305319f:9119
+(anonymous) @ chunk-RPCDYKBN.js?v=2305319f:18627Understand this error
+3chunk-E7IAXTU4.js?v=2305319f:50 Uncaught Error: `TabsContent` must be used within `Tabs`
+    at useContext2 (chunk-E7IAXTU4.js?v=2305319f:50:13)
+    at @radix-ui_react-tabs.js?v=2305319f:174:21
+    at renderWithHooks (chunk-RPCDYKBN.js?v=2305319f:11548:26)
+    at updateForwardRef (chunk-RPCDYKBN.js?v=2305319f:14325:28)
+    at beginWork (chunk-RPCDYKBN.js?v=2305319f:15946:22)
+    at HTMLUnknownElement.callCallback2 (chunk-RPCDYKBN.js?v=2305319f:3674:22)
+    at Object.invokeGuardedCallbackDev (chunk-RPCDYKBN.js?v=2305319f:3699:24)
+    at invokeGuardedCallback (chunk-RPCDYKBN.js?v=2305319f:3733:39)
+    at beginWork$1 (chunk-RPCDYKBN.js?v=2305319f:19765:15)
+    at performUnitOfWork (chunk-RPCDYKBN.js?v=2305319f:19198:20)
+useContext2 @ chunk-E7IAXTU4.js?v=2305319f:50
+(anonymous) @ @radix-ui_react-tabs.js?v=2305319f:174
+renderWithHooks @ chunk-RPCDYKBN.js?v=2305319f:11548
+updateForwardRef @ chunk-RPCDYKBN.js?v=2305319f:14325
+beginWork @ chunk-RPCDYKBN.js?v=2305319f:15946
+callCallback2 @ chunk-RPCDYKBN.js?v=2305319f:3674
+invokeGuardedCallbackDev @ chunk-RPCDYKBN.js?v=2305319f:3699
+invokeGuardedCallback @ chunk-RPCDYKBN.js?v=2305319f:3733
+beginWork$1 @ chunk-RPCDYKBN.js?v=2305319f:19765
+performUnitOfWork @ chunk-RPCDYKBN.js?v=2305319f:19198
+workLoopSync @ chunk-RPCDYKBN.js?v=2305319f:19137
+renderRootSync @ chunk-RPCDYKBN.js?v=2305319f:19116
+recoverFromConcurrentError @ chunk-RPCDYKBN.js?v=2305319f:18736
+performSyncWorkOnRoot @ chunk-RPCDYKBN.js?v=2305319f:18879
+flushSyncCallbacks @ chunk-RPCDYKBN.js?v=2305319f:9119
+(anonymous) @ chunk-RPCDYKBN.js?v=2305319f:18627Understand this error
+3chunk-RPCDYKBN.js?v=2305319f:14032 The above error occurred in the <TabsContent> component:
+
+    at https://175b6826-571d-4226-8fd6-d3b918dfe333-00-3nh1ybobs23bz.kirk.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/@radix-ui_react-tabs.js?v=2305319f:173:13
+    at _c5 (https://175b6826-571d-4226-8fd6-d3b918dfe333-00-3nh1ybobs23bz.kirk.replit.dev/src/components/ui/tabs.tsx:72:12)
+    at div
+    at div
+    at div
+    at div
+    at main
+    at div
+    at MainLayout (https://175b6826-571d-4226-8fd6-d3b918dfe333-00-3nh1ybobs23bz.kirk.replit.dev/src/components/MainLayout.tsx:32:38)
+    at ProfilePage (https://175b6826-571d-4226-8fd6-d3b918dfe333-00-3nh1ybobs23bz.kirk.replit.dev/src/pages/profile-page.tsx:66:20)
+    at Route (https://175b6826-571d-4226-8fd6-d3b918dfe333-00-3nh1ybobs23bz.kirk.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=2305319f:323:16)
+    at ProtectedRoute (https://175b6826-571d-4226-8fd6-d3b918dfe333-00-3nh1ybobs23bz.kirk.replit.dev/src/lib/protected-route.tsx:22:3)
+    at Switch (https://175b6826-571d-4226-8fd6-d3b918dfe333-00-3nh1ybobs23bz.kirk.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=2305319f:379:17)
+    at Router
+    at Provider (https://175b6826-571d-4226-8fd6-d3b918dfe333-00-3nh1ybobs23bz.kirk.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-E7IAXTU4.js?v=2305319f:38:15)
+    at TooltipProvider (https://175b6826-571d-4226-8fd6-d3b918dfe333-00-3nh1ybobs23bz.kirk.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/@radix-ui_react-tooltip.js?v=2305319f:61:5)
+    at AuthProvider (https://175b6826-571d-4226-8fd6-d3b918dfe333-00-3nh1ybobs23bz.kirk.replit.dev/src/hooks/use-auth.tsx:27:32)
+    at QueryClientProvider (https://175b6826-571d-4226-8fd6-d3b918dfe333-00-3nh1ybobs23bz.kirk.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/@tanstack_react-query.js?v=2305319f:2805:3)
+    at App
+    at V (https://175b6826-571d-4226-8fd6-d3b918dfe333-00-3nh1ybobs23bz.kirk.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/next-themes.js?v=2305319f:44:25)
+    at J (https://175b6826-571d-4226-8fd6-d3b918dfe333-00-3nh1ybobs23bz.kirk.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/next-themes.js?v=2305319f:42:18)
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries.
+logCapturedError @ chunk-RPCDYKBN.js?v=2305319f:14032
+update.callback @ chunk-RPCDYKBN.js?v=2305319f:14052
+callCallback @ chunk-RPCDYKBN.js?v=2305319f:11248
+commitUpdateQueue @ chunk-RPCDYKBN.js?v=2305319f:11265
+commitLayoutEffectOnFiber @ chunk-RPCDYKBN.js?v=2305319f:17093
+commitLayoutMountEffects_complete @ chunk-RPCDYKBN.js?v=2305319f:17980
+commitLayoutEffects_begin @ chunk-RPCDYKBN.js?v=2305319f:17969
+commitLayoutEffects @ chunk-RPCDYKBN.js?v=2305319f:17920
+commitRootImpl @ chunk-RPCDYKBN.js?v=2305319f:19353
+commitRoot @ chunk-RPCDYKBN.js?v=2305319f:19277
+performSyncWorkOnRoot @ chunk-RPCDYKBN.js?v=2305319f:18895
+flushSyncCallbacks @ chunk-RPCDYKBN.js?v=2305319f:9119
+(anonymous) @ chunk-RPCDYKBN.js?v=2305319f:18627Understand this error
+chunk-RPCDYKBN.js?v=2305319f:9129 Uncaught Error: `TabsContent` must be used within `Tabs`
+    at useContext2 (chunk-E7IAXTU4.js?v=2305319f:50:13)
+    at @radix-ui_react-tabs.js?v=2305319f:174:21
+    at renderWithHooks (chunk-RPCDYKBN.js?v=2305319f:11548:26)
+    at updateForwardRef (chunk-RPCDYKBN.js?v=2305319f:14325:28)
+    at beginWork (chunk-RPCDYKBN.js?v=2305319f:15946:22)
+    at beginWork$1 (chunk-RPCDYKBN.js?v=2305319f:19753:22)
+    at performUnitOfWork (chunk-RPCDYKBN.js?v=2305319f:19198:20)
+    at workLoopSync (chunk-RPCDYKBN.js?v=2305319f:19137:13)
+    at renderRootSync (chunk-RPCDYKBN.js?v=2305319f:19116:15)
+    at recoverFromConcurrentError (chunk-RPCDYKBN.js?v=2305319f:18736:28)
+useContext2 @ chunk-E7IAXTU4.js?v=2305319f:50
+(anonymous) @ @radix-ui_react-tabs.js?v=2305319f:174
+renderWithHooks @ chunk-RPCDYKBN.js?v=2305319f:11548
+updateForwardRef @ chunk-RPCDYKBN.js?v=2305319f:14325
+beginWork @ chunk-RPCDYKBN.js?v=2305319f:15946
+beginWork$1 @ chunk-RPCDYKBN.js?v=2305319f:19753
+performUnitOfWork @ chunk-RPCDYKBN.js?v=2305319f:19198
+workLoopSync @ chunk-RPCDYKBN.js?v=2305319f:19137
+renderRootSync @ chunk-RPCDYKBN.js?v=2305319f:19116
+recoverFromConcurrentError @ chunk-RPCDYKBN.js?v=2305319f:18736
+performSyncWorkOnRoot @ chunk-RPCDYKBN.js?v=2305319f:18879
+flushSyncCallbacks @ chunk-RPCDYKBN.js?v=2305319f:9119
+(anonymous) @ chunk-RPCDYKBN.js?v=2305319f:18627Understand this error
+NotificationSystem.tsx:72
