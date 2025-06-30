@@ -122,6 +122,7 @@ function AuthPage({ isModal = false, onClose, defaultToProvider = false }: AuthP
   function onRegisterSubmit(values: RegisterFormValues) {
     const userData = {
       ...values,
+      role: values.isServiceProvider ? "service_provider" : "client",
     };
     delete (userData as any).confirmPassword;
     registerMutation.mutate(userData);
