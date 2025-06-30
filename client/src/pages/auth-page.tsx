@@ -123,7 +123,6 @@ function AuthPage({ isModal = false, onClose, defaultToProvider = false }: AuthP
     const userData = {
       ...values,
     };
-    delete (userData as any).confirmPassword;
     registerMutation.mutate(userData);
   }
 
