@@ -3,15 +3,13 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import MainLayout from "@/components/MainLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, User, Settings, BriefcaseBusiness, Bell, Upload, FileText, Check, X, AlertCircle, Camera } from "lucide-react";
+import { Loader2, User, Settings, BriefcaseBusiness, Bell } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -56,8 +54,6 @@ export default function ProfilePage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("general");
-  const [uploadingProfilePicture, setUploadingProfilePicture] = useState(false);
-  const [uploadingDocument, setUploadingDocument] = useState(false);
   
   // Fetch user profile
   const { data: userProfile, isLoading: profileLoading } = useQuery<any>({
@@ -68,18 +64,12 @@ export default function ProfilePage() {
   // Fetch provider profile if user is a service provider
   const { data: providerProfile, isLoading: providerLoading } = useQuery<any>({
     queryKey: ["/api/user/provider"],
-    enabled: !!user && user.role === 'service_provider',
+    enabled: !!user && user.isServiceProvider,
   });
   
   // Fetch service categories for provider profile
   const { data: categories } = useQuery<any[]>({
     queryKey: ["/api/categories"],
-  });
-
-  // Fetch provider documents if user is a service provider
-  const { data: providerDocuments, isLoading: documentsLoading } = useQuery<any[]>({
-    queryKey: ["/api/provider/documents"],
-    enabled: !!user && user.role === 'service_provider',
   });
 
   // Profile form
@@ -198,143 +188,6 @@ export default function ProfilePage() {
     updateProviderProfileMutation.mutate(values);
   }
 
-  // Profile picture upload mutation
-  const uploadProfilePictureMutation = useMutation({
-    mutationFn: async (file: File) => {
-      const formData = new FormData();
-      formData.append('profilePicture', file);
-      
-      const res = await fetch('/api/user/profile-picture', {
-        method: 'POST',
-        body: formData,
-      });
-      
-      if (!res.ok) {
-        throw new Error('Failed to upload profile picture');
-      }
-      
-      return res.json();
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/user"] });
-      profileForm.setValue('profilePicture', data.profilePicture);
-      toast({
-        title: "Profile picture updated",
-        description: "Your profile picture has been uploaded successfully",
-      });
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Upload failed",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
-
-  // Document upload mutation
-  const uploadDocumentMutation = useMutation({
-    mutationFn: async ({ file, documentType }: { file: File; documentType: string }) => {
-      const formData = new FormData();
-      formData.append('document', file);
-      formData.append('documentType', documentType);
-      
-      const res = await fetch('/api/provider/documents', {
-        method: 'POST',
-        body: formData,
-      });
-      
-      if (!res.ok) {
-        throw new Error('Failed to upload document');
-      }
-      
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/provider/documents"] });
-      toast({
-        title: "Document uploaded",
-        description: "Your document has been uploaded for verification",
-      });
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Upload failed",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
-
-  // Handle profile picture upload
-  const handleProfilePictureUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    if (!file.type.startsWith('image/')) {
-      toast({
-        title: "Invalid file type",
-        description: "Please select an image file",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (file.size > 5 * 1024 * 1024) { // 5MB limit
-      toast({
-        title: "File too large",
-        description: "Please select an image smaller than 5MB",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setUploadingProfilePicture(true);
-    try {
-      await uploadProfilePictureMutation.mutateAsync(file);
-    } finally {
-      setUploadingProfilePicture(false);
-    }
-  };
-
-  // Handle document upload
-  const handleDocumentUpload = async (event: React.ChangeEvent<HTMLInputElement>, documentType: string) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    if (file.size > 10 * 1024 * 1024) { // 10MB limit
-      toast({
-        title: "File too large",
-        description: "Please select a file smaller than 10MB",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setUploadingDocument(true);
-    try {
-      await uploadDocumentMutation.mutateAsync({ file, documentType });
-    } finally {
-      setUploadingDocument(false);
-    }
-  };
-
-  // Helper function to get verification status badge
-  const getVerificationBadge = (status: string) => {
-    switch (status) {
-      case 'pending':
-        return <Badge variant="secondary"><AlertCircle className="w-3 h-3 mr-1" />Pending</Badge>;
-      case 'under_review':
-        return <Badge variant="secondary"><FileText className="w-3 h-3 mr-1" />Under Review</Badge>;
-      case 'approved':
-        return <Badge variant="default" className="bg-green-500"><Check className="w-3 h-3 mr-1" />Approved</Badge>;
-      case 'rejected':
-        return <Badge variant="destructive"><X className="w-3 h-3 mr-1" />Rejected</Badge>;
-      default:
-        return <Badge variant="secondary">Unknown</Badge>;
-    }
-  };
-
   if (profileLoading) {
     return (
       <MainLayout>
@@ -371,7 +224,7 @@ export default function ProfilePage() {
               <Card>
                 <CardContent className="p-6">
                   <div className="flex flex-col items-center text-center mb-6">
-                    <div className="mb-4 relative group">
+                    <div className="mb-4">
                       {userProfile.profilePicture ? (
                         <img 
                           src={userProfile.profilePicture} 
@@ -380,30 +233,10 @@ export default function ProfilePage() {
                         />
                       ) : (
                         <div className="w-24 h-24 rounded-full bg-primary flex items-center justify-center text-white text-2xl font-bold border-4 border-white shadow">
-                          {userProfile.firstName?.[0] || '?'}
-                          {userProfile.lastName?.[0] || '?'}
+                          {userProfile.firstName[0]}
+                          {userProfile.lastName[0]}
                         </div>
                       )}
-                      
-                      {/* Profile picture upload overlay */}
-                      <div className="absolute inset-0 rounded-full bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer flex items-center justify-center">
-                        <Label htmlFor="profile-picture-upload" className="cursor-pointer text-white">
-                          {uploadingProfilePicture ? (
-                            <Loader2 className="w-6 h-6 animate-spin" />
-                          ) : (
-                            <Camera className="w-6 h-6" />
-                          )}
-                        </Label>
-                      </div>
-                      
-                      <input
-                        id="profile-picture-upload"
-                        type="file"
-                        accept="image/*"
-                        onChange={handleProfilePictureUpload}
-                        className="hidden"
-                        disabled={uploadingProfilePicture}
-                      />
                     </div>
                     
                     <h1 className="text-xl font-bold mb-1">
@@ -451,12 +284,7 @@ export default function ProfilePage() {
             
             {/* Main content */}
             <div className="flex-1">
-              <Tabs
-                value={activeTab}
-                onValueChange={setActiveTab}
-                className="w-full"
-              >
-                <TabsContent value="general" className="mt-0">
+              <TabsContent value="general" className="mt-0">
                 <Card>
                   <CardHeader>
                     <CardTitle>Profile Information</CardTitle>
@@ -690,136 +518,7 @@ export default function ProfilePage() {
                       </Form>
                     )}
                     
-                    {/* Document Verification Section for Service Providers */}
-                    {user?.role === 'service_provider' && (
-                      <div className="mt-8 pt-8 border-t">
-                        <h3 className="text-lg font-semibold mb-4 flex items-center">
-                          <FileText className="w-5 h-5 mr-2" />
-                          Document Verification
-                        </h3>
-                        
-                        {providerProfile && (
-                          <div className="mb-4">
-                            <div className="flex items-center justify-between">
-                              <span className="text-sm font-medium">Verification Status:</span>
-                              {getVerificationBadge(providerProfile.verificationStatus)}
-                            </div>
-                            {providerProfile.rejectionReason && (
-                              <p className="text-sm text-red-600 mt-2">
-                                Rejection Reason: {providerProfile.rejectionReason}
-                              </p>
-                            )}
-                          </div>
-                        )}
-                        
-                        <div className="space-y-4">
-                          <div>
-                            <Label htmlFor="identity-upload" className="text-sm font-medium mb-2 block">
-                              Identity Document (Required)
-                            </Label>
-                            <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
-                              <input
-                                id="identity-upload"
-                                type="file"
-                                accept=".pdf,.jpg,.jpeg,.png"
-                                onChange={(e) => handleDocumentUpload(e, 'identity')}
-                                className="hidden"
-                                disabled={uploadingDocument}
-                              />
-                              <Label htmlFor="identity-upload" className="cursor-pointer">
-                                {uploadingDocument ? (
-                                  <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
-                                ) : (
-                                  <Upload className="w-6 h-6 text-gray-400 mx-auto mb-2" />
-                                )}
-                                <p className="text-sm text-gray-600">
-                                  Click to upload ID, passport, or driver's license
-                                </p>
-                                <p className="text-xs text-gray-500 mt-1">
-                                  PDF, JPG, PNG up to 10MB
-                                </p>
-                              </Label>
-                            </div>
-                          </div>
-                          
-                          <div>
-                            <Label htmlFor="license-upload" className="text-sm font-medium mb-2 block">
-                              Professional License/Certificate (Optional)
-                            </Label>
-                            <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
-                              <input
-                                id="license-upload"
-                                type="file"
-                                accept=".pdf,.jpg,.jpeg,.png"
-                                onChange={(e) => handleDocumentUpload(e, 'license')}
-                                className="hidden"
-                                disabled={uploadingDocument}
-                              />
-                              <Label htmlFor="license-upload" className="cursor-pointer">
-                                <Upload className="w-6 h-6 text-gray-400 mx-auto mb-2" />
-                                <p className="text-sm text-gray-600">
-                                  Upload professional certificates or licenses
-                                </p>
-                                <p className="text-xs text-gray-500 mt-1">
-                                  PDF, JPG, PNG up to 10MB
-                                </p>
-                              </Label>
-                            </div>
-                          </div>
-                          
-                          {/* Display uploaded documents */}
-                          {documentsLoading ? (
-                            <div className="flex justify-center py-4">
-                              <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                            </div>
-                          ) : (
-                            providerDocuments && providerDocuments.length > 0 && (
-                              <div className="mt-6">
-                                <h4 className="font-medium mb-3">Uploaded Documents</h4>
-                                <div className="space-y-2">
-                                  {providerDocuments.map((doc: any) => (
-                                    <div key={doc.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                                      <div className="flex items-center">
-                                        <FileText className="w-4 h-4 text-gray-400 mr-2" />
-                                        <div>
-                                          <p className="text-sm font-medium">{doc.originalName}</p>
-                                          <p className="text-xs text-gray-500 capitalize">{doc.documentType}</p>
-                                        </div>
-                                      </div>
-                                      <div className="flex items-center space-x-2">
-                                        {getVerificationBadge(doc.verificationStatus)}
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          onClick={() => window.open(doc.documentUrl, '_blank')}
-                                        >
-                                          View
-                                        </Button>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            )
-                          )}
-                          
-                          <div className="bg-blue-50 p-4 rounded-lg">
-                            <div className="flex items-start">
-                              <AlertCircle className="w-5 h-5 text-blue-500 mr-3 mt-0.5" />
-                              <div>
-                                <h4 className="font-medium text-blue-900 mb-1">Verification Required</h4>
-                                <p className="text-sm text-blue-700">
-                                  Upload your identity document to start the verification process. 
-                                  You'll be able to receive service requests once your documents are approved by our verification team.
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                    
-                    {userProfile.role !== 'service_provider' && (
+                    {!userProfile.isServiceProvider && (
                       <div className="bg-neutral-50 p-4 rounded-lg mt-4">
                         <h3 className="font-medium mb-2">Become a Service Provider</h3>
                         <p className="text-neutral-600 text-sm mb-4">
@@ -857,7 +556,6 @@ export default function ProfilePage() {
                   </CardContent>
                 </Card>
               </TabsContent>
-              </Tabs>
             </div>
           </div>
         </div>

@@ -194,11 +194,6 @@ Changelog:
 - June 30, 2025. Added improved positioning and error handling for tour tooltips and character placement
 - June 30, 2025. Implemented automatic scrolling to target sections during tour navigation for better visibility
 - June 30, 2025. Enhanced tour transitions with smooth scrolling and proper timing for element detection
-- June 30, 2025. Fixed profile page Tabs component structure and resolved authentication property issues
-- June 30, 2025. Implemented comprehensive file upload system with profile pictures and document verification
-- June 30, 2025. Added document verification workflow requiring identity documents for service providers
-- June 30, 2025. Implemented verification status restrictions - only approved providers can receive service requests
-- June 30, 2025. Enhanced profile page with drag-and-drop file uploads and verification status badges
 ```
 
 ## User Preferences
