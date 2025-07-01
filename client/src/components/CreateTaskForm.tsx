@@ -30,10 +30,12 @@ const taskFormSchema = z.object({
   title: z.string().min(5, "Title must be at least 5 characters"),
   description: z.string().min(10, "Description must be at least 10 characters"),
   location: z.string().min(3, "Location is required"),
-  latitude: z.string().min(1, "Latitude is required"),
-  longitude: z.string().min(1, "Longitude is required"),
+  latitude: z.string().optional(),
+  longitude: z.string().optional(), 
   categoryId: z.string().min(1, "Category is required"),
-  budget: z.string().optional(),
+  budget: z.string().min(1, "Budget is required"),
+  scheduledDate: z.string().optional(),
+  scheduledTime: z.string().optional(),
 });
 
 type TaskFormValues = z.infer<typeof taskFormSchema>;
@@ -56,8 +58,8 @@ export default function CreateTaskForm({ onSuccess }: CreateTaskFormProps) {
       const taskData = {
         ...data,
         categoryId: parseInt(data.categoryId),
-        latitude: parseFloat(data.latitude),
-        longitude: parseFloat(data.longitude),
+        latitude: data.latitude ? parseFloat(data.latitude) : undefined,
+        longitude: data.longitude ? parseFloat(data.longitude) : undefined,
         budget: data.budget ? parseFloat(data.budget) : undefined,
       };
       
@@ -93,6 +95,8 @@ export default function CreateTaskForm({ onSuccess }: CreateTaskFormProps) {
       longitude: "",
       categoryId: "",
       budget: "",
+      scheduledDate: "",
+      scheduledTime: "",
     },
   });
 
@@ -222,7 +226,7 @@ export default function CreateTaskForm({ onSuccess }: CreateTaskFormProps) {
             name="latitude"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Latitude</FormLabel>
+                <FormLabel>Latitude (Optional)</FormLabel>
                 <FormControl>
                   <Input 
                     type="number" 
@@ -241,7 +245,7 @@ export default function CreateTaskForm({ onSuccess }: CreateTaskFormProps) {
             name="longitude"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Longitude</FormLabel>
+                <FormLabel>Longitude (Optional)</FormLabel>
                 <FormControl>
                   <Input 
                     type="number" 
@@ -270,18 +274,65 @@ export default function CreateTaskForm({ onSuccess }: CreateTaskFormProps) {
           name="budget"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Budget (Optional)</FormLabel>
-              <FormControl>
-                <Input 
-                  type="number" 
-                  placeholder="Your budget for this task" 
-                  {...field} 
-                />
-              </FormControl>
+              <FormLabel>Budget</FormLabel>
+              <Select onValueChange={field.onChange} value={field.value}>
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select your budget range" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value="2">$2 USD</SelectItem>
+                  <SelectItem value="5">$5 USD</SelectItem>
+                  <SelectItem value="10">$10 USD</SelectItem>
+                  <SelectItem value="20">$20 USD</SelectItem>
+                  <SelectItem value="50">$50 USD</SelectItem>
+                  <SelectItem value="100">$100 USD</SelectItem>
+                  <SelectItem value="200">$200 USD</SelectItem>
+                  <SelectItem value="500">$500 USD</SelectItem>
+                  <SelectItem value="1000">$1000+ USD</SelectItem>
+                </SelectContent>
+              </Select>
               <FormMessage />
             </FormItem>
           )}
         />
+        
+        <div className="grid grid-cols-2 gap-4">
+          <FormField
+            control={form.control}
+            name="scheduledDate"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Scheduled Date (Optional)</FormLabel>
+                <FormControl>
+                  <Input 
+                    type="date" 
+                    {...field} 
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          
+          <FormField
+            control={form.control}
+            name="scheduledTime"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Scheduled Time (Optional)</FormLabel>
+                <FormControl>
+                  <Input 
+                    type="time" 
+                    {...field} 
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
         
         <Button 
           type="submit" 

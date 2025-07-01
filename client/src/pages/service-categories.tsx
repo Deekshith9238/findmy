@@ -24,6 +24,7 @@ export default function ServiceCategories() {
   const [locationFilter, setLocationFilter] = useState<string>("");
   const [priceRange, setPriceRange] = useState<number[]>([0, 100]);
   const [minRating, setMinRating] = useState<number>(0);
+  const [searchQuery, setSearchQuery] = useState<string>("");
   
   // Get category from URL params if present
   useEffect(() => {
@@ -55,6 +56,18 @@ export default function ServiceCategories() {
 
   // Filter providers based on filters
   const filteredProviders = providers?.filter(provider => {
+    // Filter by search query (search in name, bio, category)
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      const matchesName = `${provider.user.firstName} ${provider.user.lastName}`.toLowerCase().includes(query);
+      const matchesBio = provider.bio?.toLowerCase().includes(query);
+      const matchesCategory = provider.category.name.toLowerCase().includes(query);
+      
+      if (!matchesName && !matchesBio && !matchesCategory) {
+        return false;
+      }
+    }
+    
     // Filter by location if a location is specified
     if (locationFilter && !provider.user.username.toLowerCase().includes(locationFilter.toLowerCase())) {
       return false;
@@ -119,6 +132,17 @@ export default function ServiceCategories() {
               <h3 className="font-semibold mb-4">Filters</h3>
               
               <div className="space-y-6">
+                <div>
+                  <Label htmlFor="searchInput">Search Providers</Label>
+                  <Input
+                    id="searchInput"
+                    placeholder="Search by name, skills, or service..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="mt-1"
+                  />
+                </div>
+                
                 <div>
                   <Label htmlFor="categoryFilter">Category</Label>
                   <Select 
@@ -192,6 +216,7 @@ export default function ServiceCategories() {
                     setLocationFilter("");
                     setPriceRange([0, 100]);
                     setMinRating(0);
+                    setSearchQuery("");
                   }}
                 >
                   Reset Filters

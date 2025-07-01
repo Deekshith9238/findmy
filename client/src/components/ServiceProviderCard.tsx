@@ -9,7 +9,8 @@ interface ServiceProviderCardProps {
 
 export default function ServiceProviderCard({ provider }: ServiceProviderCardProps) {
   const { user, category, hourlyRate, rating, bio } = provider;
-  const fullName = `${user.firstName} ${user.lastName}`;
+  // For privacy, only show first name with last initial
+  const displayName = `${user.firstName} ${user.lastName ? user.lastName.charAt(0) + '.' : ''}`;
   
   // Use default avatar if no profile picture is available
   const avatarSrc = user.profilePicture || `https://ui-avatars.com/api/?name=${user.firstName}+${user.lastName}&background=random`;
@@ -20,11 +21,11 @@ export default function ServiceProviderCard({ provider }: ServiceProviderCardPro
         <div className="flex items-start">
           <img 
             src={avatarSrc} 
-            alt={`${fullName} profile picture`} 
+            alt={`${displayName} profile picture`} 
             className="w-16 h-16 rounded-full mr-4 object-cover"
           />
           <div className="flex-1">
-            <h3 className="font-semibold text-lg mb-1">{fullName}</h3>
+            <h3 className="font-semibold text-lg mb-1">{displayName}</h3>
             <div className="flex items-center flex-wrap gap-2 mb-1">
               <Badge variant="outline" className="bg-primary-light text-primary font-medium rounded-full">
                 {category.name}
