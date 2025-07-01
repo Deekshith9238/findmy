@@ -29,9 +29,11 @@ interface DocumentVerificationProps {
 
 const documentTypes = [
   { value: "identity", label: "Government ID" },
+  { value: "drivers_license", label: "Driver's License" },
   { value: "license", label: "Professional License" },
   { value: "certificate", label: "Certificate" },
   { value: "experience", label: "Experience Letter" },
+  { value: "banking_details", label: "Banking Details" },
   { value: "other", label: "Other" },
 ];
 

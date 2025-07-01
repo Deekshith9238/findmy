@@ -603,6 +603,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Change password route
+  app.put("/api/user/change-password", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+
+    try {
+      const { currentPassword, newPassword } = req.body;
+      
+      if (!currentPassword || !newPassword) {
+        return res.status(400).json({ message: "Current password and new password are required" });
+      }
+
+      // Get current user
+      const user = await storage.getUser(req.user.id);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Verify current password (import comparePasswords from auth.ts)
+      const { comparePasswords, hashPassword } = await import('./auth');
+      const isCurrentPasswordValid = await comparePasswords(currentPassword, user.password);
+      
+      if (!isCurrentPasswordValid) {
+        return res.status(400).json({ message: "Current password is incorrect" });
+      }
+
+      // Hash new password
+      const hashedNewPassword = await hashPassword(newPassword);
+      
+      // Update password
+      const updatedUser = await storage.updateUser(req.user.id, {
+        password: hashedNewPassword
+      });
+      
+      if (!updatedUser) {
+        return res.status(500).json({ message: "Failed to update password" });
+      }
+      
+      res.json({ message: "Password changed successfully" });
+    } catch (err) {
+      const error = err as Error;
+      console.error('Error changing password:', error.message);
+      res.status(500).json({ message: "Failed to change password", error: error.message });
+    }
+  });
+
   // Get provider documents
   app.get("/api/provider/documents/:providerId", async (req, res) => {
     if (!req.isAuthenticated()) {
