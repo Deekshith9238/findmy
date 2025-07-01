@@ -1207,9 +1207,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
       );
       
       // Create privacy-protected notifications for nearby providers
-      // Only send task name and approximate distance, NOT exact address
+      // Only send to providers with approved banking details (fully verified)
       const notifications = await Promise.all(
         nearbyProviders.map(async (provider: any) => {
+          // Check if provider has all 3 required approved documents
+          const documents = await storage.getServiceProviderDocuments(provider.id);
+          const approvedDocs = documents.filter(doc => doc.verificationStatus === "approved");
+          
+          const hasApprovedIdentity = approvedDocs.some(doc => 
+            doc.documentType === "identity" || doc.documentType === "drivers_license"
+          );
+          const hasApprovedBankingDetails = approvedDocs.some(doc => 
+            doc.documentType === "banking_details"
+          );
+          const hasApprovedLicense = approvedDocs.some(doc => 
+            doc.documentType === "license" || doc.documentType === "certificate"
+          );
+          
+          const isFullyVerified = hasApprovedIdentity && hasApprovedBankingDetails && hasApprovedLicense;
+          
+          // Only notify fully verified providers with banking details
+          if (!isFullyVerified) {
+            return null; // Skip notification for unverified providers
+          }
+          
           // Calculate approximate distance for privacy
           const distance = calculateDistance(task.latitude, task.longitude, provider.latitude, provider.longitude);
           const approximateDistance = `~${Math.round(distance)}km away`;
@@ -1230,7 +1251,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           await sendNotificationToUser(provider.userId, notification);
           return notification;
         })
-      );
+      ).then(results => results.filter(notification => notification !== null));
       
       res.status(201).json({ task, notificationsSent: notifications.length });
     } catch (err) {

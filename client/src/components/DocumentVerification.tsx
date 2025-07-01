@@ -132,8 +132,20 @@ export default function DocumentVerification({ providerId }: DocumentVerificatio
   };
 
   const approvedDocs = documents?.filter(doc => doc.verificationStatus === "approved") || [];
-  const totalRequiredDocs = 2; // Government ID + Professional License
-  const isFullyVerified = approvedDocs.length >= totalRequiredDocs;
+  
+  // Check for specific required document types
+  const hasApprovedIdentity = approvedDocs.some(doc => 
+    doc.documentType === "identity" || doc.documentType === "drivers_license"
+  );
+  const hasApprovedBankingDetails = approvedDocs.some(doc => 
+    doc.documentType === "banking_details"
+  );
+  const hasApprovedLicense = approvedDocs.some(doc => 
+    doc.documentType === "license" || doc.documentType === "certificate"
+  );
+  
+  const totalRequiredDocs = 3; // Government ID/Driver's License + Banking Details + Professional License/Certificate
+  const isFullyVerified = hasApprovedIdentity && hasApprovedBankingDetails && hasApprovedLicense;
 
   return (
     <Card>
@@ -155,10 +167,20 @@ export default function DocumentVerification({ providerId }: DocumentVerificatio
         {!isFullyVerified && (
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
             <h4 className="font-medium text-blue-900 mb-2">Verification Required</h4>
-            <p className="text-sm text-blue-800">
-              You need to upload and get approved at least {totalRequiredDocs} documents 
-              (Government ID and Professional License) to start receiving tasks.
+            <p className="text-sm text-blue-800 mb-3">
+              You need to upload and get approved all {totalRequiredDocs} required documents to start receiving tasks:
             </p>
+            <ul className="text-sm text-blue-800 space-y-1">
+              <li className={`flex items-center gap-2 ${hasApprovedIdentity ? 'text-green-700' : ''}`}>
+                {hasApprovedIdentity ? '✓' : '○'} Government ID or Driver's License
+              </li>
+              <li className={`flex items-center gap-2 ${hasApprovedBankingDetails ? 'text-green-700' : ''}`}>
+                {hasApprovedBankingDetails ? '✓' : '○'} Banking Details (Mandatory)
+              </li>
+              <li className={`flex items-center gap-2 ${hasApprovedLicense ? 'text-green-700' : ''}`}>
+                {hasApprovedLicense ? '✓' : '○'} Professional License or Certificate
+              </li>
+            </ul>
           </div>
         )}
 

@@ -63,7 +63,26 @@ export default function ProviderDashboard() {
     enabled: !!user && !!providerProfile,
   });
 
-  // Filter tasks that match the provider's category
+  // Fetch provider documents for verification check
+  const { data: documents } = useQuery<any[]>({
+    queryKey: ["/api/user/provider/documents"],
+    enabled: !!user && !!providerProfile,
+  });
+
+  // Check if provider is fully verified (has all 3 required approved documents)
+  const approvedDocs = documents?.filter(doc => doc.verificationStatus === "approved") || [];
+  const hasApprovedIdentity = approvedDocs.some(doc => 
+    doc.documentType === "identity" || doc.documentType === "drivers_license"
+  );
+  const hasApprovedBankingDetails = approvedDocs.some(doc => 
+    doc.documentType === "banking_details"
+  );
+  const hasApprovedLicense = approvedDocs.some(doc => 
+    doc.documentType === "license" || doc.documentType === "certificate"
+  );
+  const isFullyVerified = hasApprovedIdentity && hasApprovedBankingDetails && hasApprovedLicense;
+
+  // Filter tasks that match the provider's category (only show to verified providers)
   const filteredTasks = availableTasks?.filter(
     (task) => 
       task.category.id === providerProfile?.category.id && 
@@ -185,7 +204,7 @@ export default function ProviderDashboard() {
           <p className="text-neutral-600 mb-6">
             You don't have a service provider profile yet. Please update your profile to become a service provider.
           </p>
-          <Button href="/profile">Update Profile</Button>
+          <Button onClick={() => window.location.href = '/profile'}>Update Profile</Button>
         </div>
       </MainLayout>
     );
@@ -238,11 +257,50 @@ export default function ProviderDashboard() {
             </TabsList>
             
             <TabsContent value="available-tasks">
+              {!isFullyVerified && (
+                <Card className="bg-red-50 border-red-200 mb-6">
+                  <CardContent className="p-6">
+                    <div className="flex items-center gap-3">
+                      <X className="h-8 w-8 text-red-600" />
+                      <div>
+                        <h3 className="font-semibold text-red-900 mb-2">Verification Required</h3>
+                        <p className="text-red-800 mb-3">
+                          You must complete document verification before receiving task notifications or viewing available tasks.
+                        </p>
+                        <div className="text-sm text-red-700">
+                          <p className="mb-2">Required documents (all must be approved):</p>
+                          <ul className="space-y-1 ml-4">
+                            <li className={`flex items-center gap-2 ${hasApprovedIdentity ? 'text-green-700' : ''}`}>
+                              {hasApprovedIdentity ? '✓' : '○'} Government ID or Driver's License
+                            </li>
+                            <li className={`flex items-center gap-2 ${hasApprovedBankingDetails ? 'text-green-700' : ''}`}>
+                              {hasApprovedBankingDetails ? '✓' : '○'} Banking Details (Mandatory)
+                            </li>
+                            <li className={`flex items-center gap-2 ${hasApprovedLicense ? 'text-green-700' : ''}`}>
+                              {hasApprovedLicense ? '✓' : '○'} Professional License or Certificate
+                            </li>
+                          </ul>
+                          <div className="mt-3">
+                            <Button 
+                              size="sm" 
+                              onClick={() => window.location.href = '/profile?tab=documents'}
+                              className="bg-red-700 hover:bg-red-800"
+                            >
+                              Complete Verification
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+              
               {tasksLoading ? (
                 <div className="flex justify-center py-12">
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 </div>
-              ) : filteredTasks && filteredTasks.length > 0 ? (
+              ) : isFullyVerified && filteredTasks && filteredTasks.length > 0 ? (
                 <div className="grid gap-6">
                   {filteredTasks.map((task) => (
                     <Card key={task.id} className="overflow-hidden">
@@ -287,7 +345,7 @@ export default function ProviderDashboard() {
                     </Card>
                   ))}
                 </div>
-              ) : (
+              ) : isFullyVerified ? (
                 <Card className="bg-white">
                   <CardContent className="flex flex-col items-center justify-center py-12">
                     <FileText className="h-12 w-12 text-neutral-400 mb-4" />
@@ -298,7 +356,7 @@ export default function ProviderDashboard() {
                     </p>
                   </CardContent>
                 </Card>
-              )}
+              ) : null}
             </TabsContent>
             
             <TabsContent value="requests">

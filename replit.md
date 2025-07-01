@@ -197,6 +197,10 @@ Changelog:
 - June 30, 2025. Fixed critical route ordering bug: moved `/api/providers/me` before `/api/providers/:id` to prevent interception
 - June 30, 2025. Resolved HTTP 413 payload too large error by increasing Express body parser limits to 50MB for document uploads
 - June 30, 2025. Verified provider profile API endpoints now work correctly with proper authentication and data retrieval
+- July 01, 2025. Made banking details mandatory for service provider verification - now requires 3 approved documents
+- July 01, 2025. Enhanced verification system: Government ID/Driver's License + Banking Details + Professional License/Certificate
+- July 01, 2025. Updated task notification system to only notify fully verified providers with approved banking details
+- July 01, 2025. Added verification status warnings in provider dashboard with clear completion requirements
 ```
 
 ## User Preferences
