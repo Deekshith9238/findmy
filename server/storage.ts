@@ -7,7 +7,10 @@ import {
   reviews, type Review, type InsertReview,
   serviceProviderDocuments, type ServiceProviderDocument, type InsertServiceProviderDocument,
   callCenterAssignments, type CallCenterAssignment, type InsertCallCenterAssignment,
-  notifications, type Notification, type InsertNotification
+  notifications, type Notification, type InsertNotification,
+  escrowPayments, type EscrowPayment, type InsertEscrowPayment,
+  workCompletionPhotos, type WorkCompletionPhoto, type InsertWorkCompletionPhoto,
+  providerBankAccounts, type ProviderBankAccount, type InsertProviderBankAccount
 } from "@shared/schema";
 import session from "express-session";
 import createMemoryStore from "memorystore";
@@ -82,6 +85,22 @@ export interface IStorage {
   // Location-based methods
   getNearbyServiceProviders(latitude: number, longitude: number, radius: number, categoryId?: number): Promise<ServiceProvider[]>;
   
+  // Payment system methods
+  createEscrowPayment(payment: InsertEscrowPayment): Promise<EscrowPayment>;
+  getEscrowPayment(id: number): Promise<EscrowPayment | undefined>;
+  getEscrowPaymentByServiceRequest(serviceRequestId: number): Promise<EscrowPayment | undefined>;
+  updateEscrowPayment(id: number, payment: Partial<EscrowPayment>): Promise<EscrowPayment | undefined>;
+  getPendingPayments(): Promise<EscrowPayment[]>;
+  
+  // Work completion photos
+  createWorkCompletionPhoto(photo: InsertWorkCompletionPhoto): Promise<WorkCompletionPhoto>;
+  getWorkCompletionPhotos(serviceRequestId: number): Promise<WorkCompletionPhoto[]>;
+  
+  // Provider bank accounts
+  createProviderBankAccount(account: InsertProviderBankAccount): Promise<ProviderBankAccount>;
+  getProviderBankAccount(providerId: number): Promise<ProviderBankAccount | undefined>;
+  updateProviderBankAccount(id: number, account: Partial<ProviderBankAccount>): Promise<ProviderBankAccount | undefined>;
+  
   // Session store
   sessionStore: session.Store;
 }
@@ -96,6 +115,9 @@ export class MemStorage implements IStorage {
   private serviceProviderDocuments: Map<number, ServiceProviderDocument>;
   private callCenterAssignments: Map<number, CallCenterAssignment>;
   private notifications: Map<number, Notification>;
+  private escrowPayments: Map<number, EscrowPayment>;
+  private workCompletionPhotos: Map<number, WorkCompletionPhoto>;
+  private providerBankAccounts: Map<number, ProviderBankAccount>;
   
   sessionStore: session.Store;
   currentId: { [key: string]: number };
@@ -109,6 +131,10 @@ export class MemStorage implements IStorage {
     this.reviews = new Map();
     this.serviceProviderDocuments = new Map();
     this.callCenterAssignments = new Map();
+    this.notifications = new Map();
+    this.escrowPayments = new Map();
+    this.workCompletionPhotos = new Map();
+    this.providerBankAccounts = new Map();
     
     this.currentId = {
       users: 1,
@@ -118,7 +144,11 @@ export class MemStorage implements IStorage {
       serviceRequests: 1,
       reviews: 1,
       serviceProviderDocuments: 1,
-      callCenterAssignments: 1
+      callCenterAssignments: 1,
+      notifications: 1,
+      escrowPayments: 1,
+      workCompletionPhotos: 1,
+      providerBankAccounts: 1
     };
     
     this.sessionStore = new MemoryStore({
@@ -858,6 +888,63 @@ export class DatabaseStorage implements IStorage {
     const params = categoryId ? [latitude, longitude, radius, categoryId] : [latitude, longitude, radius];
     const result = await pool.query(query, params);
     return result.rows;
+  }
+
+  // Payment system methods
+  async createEscrowPayment(payment: InsertEscrowPayment): Promise<EscrowPayment> {
+    const [newPayment] = await db.insert(escrowPayments).values(payment).returning();
+    return newPayment;
+  }
+
+  async getEscrowPayment(id: number): Promise<EscrowPayment | undefined> {
+    const [payment] = await db.select().from(escrowPayments).where(eq(escrowPayments.id, id));
+    return payment;
+  }
+
+  async getEscrowPaymentByServiceRequest(serviceRequestId: number): Promise<EscrowPayment | undefined> {
+    const [payment] = await db.select().from(escrowPayments).where(eq(escrowPayments.serviceRequestId, serviceRequestId));
+    return payment;
+  }
+
+  async updateEscrowPayment(id: number, payment: Partial<EscrowPayment>): Promise<EscrowPayment | undefined> {
+    const [updatedPayment] = await db.update(escrowPayments)
+      .set(payment)
+      .where(eq(escrowPayments.id, id))
+      .returning();
+    return updatedPayment;
+  }
+
+  async getPendingPayments(): Promise<EscrowPayment[]> {
+    return db.select().from(escrowPayments).where(eq(escrowPayments.status, 'held'));
+  }
+
+  // Work completion photos
+  async createWorkCompletionPhoto(photo: InsertWorkCompletionPhoto): Promise<WorkCompletionPhoto> {
+    const [newPhoto] = await db.insert(workCompletionPhotos).values(photo).returning();
+    return newPhoto;
+  }
+
+  async getWorkCompletionPhotos(serviceRequestId: number): Promise<WorkCompletionPhoto[]> {
+    return db.select().from(workCompletionPhotos).where(eq(workCompletionPhotos.serviceRequestId, serviceRequestId));
+  }
+
+  // Provider bank accounts
+  async createProviderBankAccount(account: InsertProviderBankAccount): Promise<ProviderBankAccount> {
+    const [newAccount] = await db.insert(providerBankAccounts).values(account).returning();
+    return newAccount;
+  }
+
+  async getProviderBankAccount(providerId: number): Promise<ProviderBankAccount | undefined> {
+    const [account] = await db.select().from(providerBankAccounts).where(eq(providerBankAccounts.providerId, providerId));
+    return account;
+  }
+
+  async updateProviderBankAccount(id: number, account: Partial<ProviderBankAccount>): Promise<ProviderBankAccount | undefined> {
+    const [updatedAccount] = await db.update(providerBankAccounts)
+      .set(account)
+      .where(eq(providerBankAccounts.id, id))
+      .returning();
+    return updatedAccount;
   }
 }
 

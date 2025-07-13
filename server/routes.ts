@@ -12,8 +12,14 @@ import {
   insertServiceRequestSchema,
   insertReviewSchema,
   insertUserSchema,
-  insertNotificationSchema
+  insertNotificationSchema,
+  insertEscrowPaymentSchema,
+  insertWorkCompletionPhotoSchema,
+  insertProviderBankAccountSchema,
+  paymentStatuses,
+  userRoles
 } from "@shared/schema";
+import Stripe from "stripe";
 import type { Request, Response, NextFunction } from "express";
 
 // Distance calculation utility for privacy protection
@@ -28,6 +34,15 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
   return R * c; // Distance in kilometers
 }
+
+// Initialize Stripe
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+  apiVersion: '2024-06-20'
+});
+
+// Payment calculations
+const PLATFORM_FEE_PERCENTAGE = 0.15; // 15% platform fee
+const TAX_RATE = 0.08; // 8% tax rate
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Set up authentication routes
@@ -1321,6 +1336,451 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Store the notification function globally so it can be used elsewhere
   (global as any).sendNotificationToUser = sendNotificationToUser;
+
+  // ========== PAYMENT SYSTEM ROUTES ==========
+
+  // Admin/Payment Approver middleware
+  const requirePaymentApprover = (req: any, res: Response, next: NextFunction) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+    if (req.user.role !== userRoles.PAYMENT_APPROVER && req.user.role !== userRoles.ADMIN) {
+      return res.status(403).json({ message: "Payment approver access required" });
+    }
+    next();
+  };
+
+  // Create payment intent for service request
+  app.post("/api/payments/create-intent", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+
+    try {
+      const { serviceRequestId, amount } = req.body;
+
+      // Validate service request exists and belongs to user
+      const serviceRequest = await storage.getServiceRequest(serviceRequestId);
+      if (!serviceRequest) {
+        return res.status(404).json({ message: "Service request not found" });
+      }
+      if (serviceRequest.clientId !== req.user.id) {
+        return res.status(403).json({ message: "Not authorized for this service request" });
+      }
+
+      // Check if payment already exists
+      const existingPayment = await storage.getEscrowPaymentByServiceRequest(serviceRequestId);
+      if (existingPayment) {
+        return res.status(400).json({ message: "Payment already exists for this service request" });
+      }
+
+      // Get provider details
+      const provider = await storage.getServiceProvider(serviceRequest.providerId);
+      if (!provider) {
+        return res.status(404).json({ message: "Service provider not found" });
+      }
+
+      // Calculate fees
+      const baseAmount = parseFloat(amount);
+      const platformFee = baseAmount * PLATFORM_FEE_PERCENTAGE;
+      const tax = baseAmount * TAX_RATE;
+      const totalAmount = baseAmount + platformFee + tax;
+      const payoutAmount = baseAmount - platformFee;
+
+      // Create Stripe Payment Intent
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: Math.round(totalAmount * 100), // Convert to cents
+        currency: 'usd',
+        metadata: {
+          serviceRequestId: serviceRequestId.toString(),
+          clientId: req.user.id.toString(),
+          providerId: provider.id.toString()
+        }
+      });
+
+      // Create escrow payment record
+      const escrowPayment = await storage.createEscrowPayment({
+        serviceRequestId,
+        clientId: req.user.id,
+        providerId: provider.id,
+        stripePaymentIntentId: paymentIntent.id,
+        amount: baseAmount,
+        platformFee,
+        tax,
+        totalAmount,
+        payoutAmount,
+        status: paymentStatuses.PENDING
+      });
+
+      res.json({
+        clientSecret: paymentIntent.client_secret,
+        paymentId: escrowPayment.id,
+        breakdown: {
+          amount: baseAmount,
+          platformFee,
+          tax,
+          totalAmount,
+          payoutAmount
+        }
+      });
+    } catch (error) {
+      console.error('Payment intent creation error:', error);
+      res.status(500).json({ message: "Failed to create payment intent" });
+    }
+  });
+
+  // Confirm payment and hold in escrow
+  app.post("/api/payments/confirm", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+
+    try {
+      const { paymentId } = req.body;
+
+      const payment = await storage.getEscrowPayment(paymentId);
+      if (!payment) {
+        return res.status(404).json({ message: "Payment not found" });
+      }
+      if (payment.clientId !== req.user.id) {
+        return res.status(403).json({ message: "Not authorized for this payment" });
+      }
+
+      // Verify payment intent with Stripe
+      const paymentIntent = await stripe.paymentIntents.retrieve(payment.stripePaymentIntentId);
+      if (paymentIntent.status !== 'succeeded') {
+        return res.status(400).json({ message: "Payment not completed" });
+      }
+
+      // Update payment status to held
+      await storage.updateEscrowPayment(paymentId, {
+        status: paymentStatuses.HELD,
+        heldAt: new Date()
+      });
+
+      // Update service request status
+      await storage.updateServiceRequest(payment.serviceRequestId, {
+        status: 'payment_held'
+      });
+
+      res.json({ message: "Payment confirmed and held in escrow" });
+    } catch (error) {
+      console.error('Payment confirmation error:', error);
+      res.status(500).json({ message: "Failed to confirm payment" });
+    }
+  });
+
+  // Provider submits work completion photos
+  app.post("/api/payments/submit-work", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+
+    try {
+      const { serviceRequestId, photos } = req.body;
+
+      // Validate service request
+      const serviceRequest = await storage.getServiceRequest(serviceRequestId);
+      if (!serviceRequest) {
+        return res.status(404).json({ message: "Service request not found" });
+      }
+
+      // Verify user is the assigned provider
+      const provider = await storage.getServiceProviderByUserId(req.user.id);
+      if (!provider || provider.id !== serviceRequest.providerId) {
+        return res.status(403).json({ message: "Not authorized for this service request" });
+      }
+
+      // Check if payment is held
+      const payment = await storage.getEscrowPaymentByServiceRequest(serviceRequestId);
+      if (!payment || payment.status !== paymentStatuses.HELD) {
+        return res.status(400).json({ message: "Payment not held for this service request" });
+      }
+
+      // Save work completion photos
+      const photoRecords = await Promise.all(
+        photos.map(async (photo: any) => {
+          return await storage.createWorkCompletionPhoto({
+            serviceRequestId,
+            providerId: provider.id,
+            photoUrl: photo.url,
+            originalName: photo.originalName,
+            description: photo.description
+          });
+        })
+      );
+
+      // Update service request status
+      await storage.updateServiceRequest(serviceRequestId, {
+        status: 'work_completed'
+      });
+
+      // Update payment status to awaiting approval
+      await storage.updateEscrowPayment(payment.id, {
+        status: paymentStatuses.APPROVED
+      });
+
+      // Notify payment approvers
+      const users = await storage.getAllUsers();
+      const paymentApprovers = users.filter(user => 
+        user.role === userRoles.PAYMENT_APPROVER || user.role === userRoles.ADMIN
+      );
+
+      const notifications = await Promise.all(
+        paymentApprovers.map(async (approver) => {
+          const notification = await storage.createNotification({
+            userId: approver.id,
+            type: 'payment_approval_required',
+            title: 'Payment Approval Required',
+            message: `Work completion submitted for service request #${serviceRequestId}`,
+            data: JSON.stringify({ serviceRequestId, paymentId: payment.id })
+          });
+          await sendNotificationToUser(approver.id, notification);
+          return notification;
+        })
+      );
+
+      res.json({ 
+        message: "Work completion submitted successfully",
+        photos: photoRecords,
+        notificationsSent: notifications.length
+      });
+    } catch (error) {
+      console.error('Work submission error:', error);
+      res.status(500).json({ message: "Failed to submit work completion" });
+    }
+  });
+
+  // Get pending payment approvals (for payment approvers)
+  app.get("/api/payments/pending", requirePaymentApprover, async (req, res) => {
+    try {
+      const pendingPayments = await storage.getPendingPayments();
+      
+      // Enrich with service request and user details
+      const enrichedPayments = await Promise.all(
+        pendingPayments.map(async (payment) => {
+          const serviceRequest = await storage.getServiceRequest(payment.serviceRequestId);
+          const client = await storage.getUser(payment.clientId);
+          const provider = await storage.getServiceProvider(payment.providerId);
+          const photos = await storage.getWorkCompletionPhotos(payment.serviceRequestId);
+
+          return {
+            ...payment,
+            serviceRequest,
+            client,
+            provider,
+            photos
+          };
+        })
+      );
+
+      res.json(enrichedPayments);
+    } catch (error) {
+      console.error('Pending payments fetch error:', error);
+      res.status(500).json({ message: "Failed to fetch pending payments" });
+    }
+  });
+
+  // Approve payment and release to provider
+  app.post("/api/payments/approve", requirePaymentApprover, async (req, res) => {
+    try {
+      const { paymentId } = req.body;
+
+      const payment = await storage.getEscrowPayment(paymentId);
+      if (!payment) {
+        return res.status(404).json({ message: "Payment not found" });
+      }
+      if (payment.status !== paymentStatuses.APPROVED) {
+        return res.status(400).json({ message: "Payment not ready for approval" });
+      }
+
+      // Get provider bank account
+      const bankAccount = await storage.getProviderBankAccount(payment.providerId);
+      if (!bankAccount) {
+        return res.status(400).json({ message: "Provider bank account not found" });
+      }
+
+      // Create Stripe transfer to provider
+      const transfer = await stripe.transfers.create({
+        amount: Math.round(payment.payoutAmount * 100),
+        currency: 'usd',
+        destination: bankAccount.stripeAccountId,
+        metadata: {
+          paymentId: paymentId.toString(),
+          serviceRequestId: payment.serviceRequestId.toString()
+        }
+      });
+
+      // Update payment status and add transfer details
+      await storage.updateEscrowPayment(paymentId, {
+        status: paymentStatuses.RELEASED,
+        stripeTransferId: transfer.id,
+        approvedBy: req.user.id,
+        approvedAt: new Date(),
+        releasedAt: new Date()
+      });
+
+      // Update service request status
+      await storage.updateServiceRequest(payment.serviceRequestId, {
+        status: 'completed_and_paid'
+      });
+
+      // Notify provider about payment release
+      const provider = await storage.getServiceProvider(payment.providerId);
+      if (provider) {
+        const notification = await storage.createNotification({
+          userId: provider.userId,
+          type: 'payment_released',
+          title: 'Payment Released',
+          message: `Payment of $${payment.payoutAmount.toFixed(2)} has been released to your account`,
+          data: JSON.stringify({ paymentId, amount: payment.payoutAmount })
+        });
+        await sendNotificationToUser(provider.userId, notification);
+      }
+
+      res.json({ message: "Payment approved and released to provider" });
+    } catch (error) {
+      console.error('Payment approval error:', error);
+      res.status(500).json({ message: "Failed to approve payment" });
+    }
+  });
+
+  // Reject payment and refund to client
+  app.post("/api/payments/reject", requirePaymentApprover, async (req, res) => {
+    try {
+      const { paymentId, reason } = req.body;
+
+      const payment = await storage.getEscrowPayment(paymentId);
+      if (!payment) {
+        return res.status(404).json({ message: "Payment not found" });
+      }
+      if (payment.status !== paymentStatuses.APPROVED) {
+        return res.status(400).json({ message: "Payment not ready for rejection" });
+      }
+
+      // Create Stripe refund
+      const refund = await stripe.refunds.create({
+        payment_intent: payment.stripePaymentIntentId,
+        reason: 'requested_by_customer',
+        metadata: {
+          paymentId: paymentId.toString(),
+          rejectionReason: reason
+        }
+      });
+
+      // Update payment status
+      await storage.updateEscrowPayment(paymentId, {
+        status: paymentStatuses.REFUNDED,
+        approvedBy: req.user.id,
+        approvedAt: new Date(),
+        refundedAt: new Date()
+      });
+
+      // Update service request status
+      await storage.updateServiceRequest(payment.serviceRequestId, {
+        status: 'disputed_and_refunded'
+      });
+
+      // Notify client about refund
+      const notification = await storage.createNotification({
+        userId: payment.clientId,
+        type: 'payment_refunded',
+        title: 'Payment Refunded',
+        message: `Your payment of $${payment.totalAmount.toFixed(2)} has been refunded. Reason: ${reason}`,
+        data: JSON.stringify({ paymentId, amount: payment.totalAmount, reason })
+      });
+      await sendNotificationToUser(payment.clientId, notification);
+
+      res.json({ message: "Payment rejected and refunded to client" });
+    } catch (error) {
+      console.error('Payment rejection error:', error);
+      res.status(500).json({ message: "Failed to reject payment" });
+    }
+  });
+
+  // Provider bank account management
+  app.post("/api/payments/bank-account", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+
+    try {
+      const provider = await storage.getServiceProviderByUserId(req.user.id);
+      if (!provider) {
+        return res.status(404).json({ message: "Service provider profile not found" });
+      }
+
+      const { accountHolderName, bankName, accountNumber, routingNumber } = req.body;
+
+      // Create Stripe Connect account for provider
+      const account = await stripe.accounts.create({
+        type: 'express',
+        country: 'US',
+        email: req.user.email,
+        capabilities: {
+          card_payments: { requested: true },
+          transfers: { requested: true }
+        }
+      });
+
+      // Save bank account details
+      const bankAccount = await storage.createProviderBankAccount({
+        providerId: provider.id,
+        stripeAccountId: account.id,
+        accountHolderName,
+        bankName,
+        accountNumber: `****${accountNumber.slice(-4)}`, // Mask account number
+        routingNumber,
+        accountType: 'checking',
+        isVerified: false
+      });
+
+      res.json({ 
+        message: "Bank account added successfully",
+        bankAccount: {
+          id: bankAccount.id,
+          accountHolderName: bankAccount.accountHolderName,
+          bankName: bankAccount.bankName,
+          accountNumber: bankAccount.accountNumber,
+          isVerified: bankAccount.isVerified
+        }
+      });
+    } catch (error) {
+      console.error('Bank account creation error:', error);
+      res.status(500).json({ message: "Failed to add bank account" });
+    }
+  });
+
+  // Get provider bank account
+  app.get("/api/payments/bank-account", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+
+    try {
+      const provider = await storage.getServiceProviderByUserId(req.user.id);
+      if (!provider) {
+        return res.status(404).json({ message: "Service provider profile not found" });
+      }
+
+      const bankAccount = await storage.getProviderBankAccount(provider.id);
+      if (!bankAccount) {
+        return res.status(404).json({ message: "Bank account not found" });
+      }
+
+      res.json({
+        id: bankAccount.id,
+        accountHolderName: bankAccount.accountHolderName,
+        bankName: bankAccount.bankName,
+        accountNumber: bankAccount.accountNumber,
+        isVerified: bankAccount.isVerified,
+        isActive: bankAccount.isActive
+      });
+    } catch (error) {
+      console.error('Bank account fetch error:', error);
+      res.status(500).json({ message: "Failed to fetch bank account" });
+    }
+  });
 
   return httpServer;
 }

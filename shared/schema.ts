@@ -9,7 +9,8 @@ export const userRoles = {
   SERVICE_VERIFIER: "service_verifier", 
   CALL_CENTER: "call_center",
   SERVICE_PROVIDER: "service_provider",
-  CLIENT: "client"
+  CLIENT: "client",
+  PAYMENT_APPROVER: "payment_approver"
 } as const;
 
 // User table for all user types
@@ -102,6 +103,66 @@ export const serviceProviderDocuments = pgTable("service_provider_documents", {
   notes: text("notes"),
 });
 
+// Payment escrow system tables
+export const paymentStatuses = {
+  PENDING: "pending",
+  HELD: "held",
+  APPROVED: "approved",
+  RELEASED: "released",
+  REFUNDED: "refunded",
+  FAILED: "failed"
+} as const;
+
+// Escrow payments table
+export const escrowPayments = pgTable("escrow_payments", {
+  id: serial("id").primaryKey(),
+  serviceRequestId: integer("service_request_id").notNull().references(() => serviceRequests.id),
+  clientId: integer("client_id").notNull().references(() => users.id),
+  providerId: integer("provider_id").notNull().references(() => serviceProviders.id),
+  stripePaymentIntentId: text("stripe_payment_intent_id").notNull(),
+  stripeTransferId: text("stripe_transfer_id"),
+  amount: doublePrecision("amount").notNull(), // Base service amount
+  platformFee: doublePrecision("platform_fee").notNull(), // Platform commission
+  tax: doublePrecision("tax").notNull(), // Tax amount
+  totalAmount: doublePrecision("total_amount").notNull(), // Total charged to client
+  payoutAmount: doublePrecision("payout_amount").notNull(), // Amount to be paid to provider (amount - platform fee)
+  status: text("status").notNull().default(paymentStatuses.PENDING),
+  heldAt: timestamp("held_at"),
+  approvedBy: integer("approved_by").references(() => users.id),
+  approvedAt: timestamp("approved_at"),
+  releasedAt: timestamp("released_at"),
+  refundedAt: timestamp("refunded_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Work completion photos
+export const workCompletionPhotos = pgTable("work_completion_photos", {
+  id: serial("id").primaryKey(),
+  serviceRequestId: integer("service_request_id").notNull().references(() => serviceRequests.id),
+  providerId: integer("provider_id").notNull().references(() => serviceProviders.id),
+  photoUrl: text("photo_url").notNull(),
+  originalName: text("original_name").notNull(),
+  description: text("description"),
+  uploadedAt: timestamp("uploaded_at").defaultNow(),
+});
+
+// Provider bank accounts for payouts
+export const providerBankAccounts = pgTable("provider_bank_accounts", {
+  id: serial("id").primaryKey(),
+  providerId: integer("provider_id").notNull().references(() => serviceProviders.id),
+  stripeAccountId: text("stripe_account_id").notNull(), // Stripe Connect account ID
+  accountHolderName: text("account_holder_name").notNull(),
+  bankName: text("bank_name").notNull(),
+  accountNumber: text("account_number").notNull(), // Encrypted/masked
+  routingNumber: text("routing_number").notNull(),
+  accountType: text("account_type").notNull().default("checking"), // checking, savings
+  isVerified: boolean("is_verified").notNull().default(false),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Service providers relations
 export const serviceProvidersRelations = relations(serviceProviders, ({ one, many }) => ({
   user: one(users, {
@@ -132,6 +193,48 @@ export const serviceProviderDocumentsRelations = relations(serviceProviderDocume
     fields: [serviceProviderDocuments.verifiedBy],
     references: [users.id],
     relationName: 'verifier',
+  }),
+}));
+
+// Escrow payments relations
+export const escrowPaymentsRelations = relations(escrowPayments, ({ one }) => ({
+  serviceRequest: one(serviceRequests, {
+    fields: [escrowPayments.serviceRequestId],
+    references: [serviceRequests.id],
+  }),
+  client: one(users, {
+    fields: [escrowPayments.clientId],
+    references: [users.id],
+    relationName: 'client',
+  }),
+  provider: one(serviceProviders, {
+    fields: [escrowPayments.providerId],
+    references: [serviceProviders.id],
+  }),
+  approver: one(users, {
+    fields: [escrowPayments.approvedBy],
+    references: [users.id],
+    relationName: 'approver',
+  }),
+}));
+
+// Work completion photos relations
+export const workCompletionPhotosRelations = relations(workCompletionPhotos, ({ one }) => ({
+  serviceRequest: one(serviceRequests, {
+    fields: [workCompletionPhotos.serviceRequestId],
+    references: [serviceRequests.id],
+  }),
+  provider: one(serviceProviders, {
+    fields: [workCompletionPhotos.providerId],
+    references: [serviceProviders.id],
+  }),
+}));
+
+// Provider bank accounts relations
+export const providerBankAccountsRelations = relations(providerBankAccounts, ({ one }) => ({
+  provider: one(serviceProviders, {
+    fields: [providerBankAccounts.providerId],
+    references: [serviceProviders.id],
   }),
 }));
 
@@ -333,6 +436,23 @@ export const insertNotificationSchema = createInsertSchema(notifications).omit({
   createdAt: true
 });
 
+export const insertEscrowPaymentSchema = createInsertSchema(escrowPayments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+
+export const insertWorkCompletionPhotoSchema = createInsertSchema(workCompletionPhotos).omit({
+  id: true,
+  uploadedAt: true
+});
+
+export const insertProviderBankAccountSchema = createInsertSchema(providerBankAccounts).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+
 // Types
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -361,8 +481,20 @@ export type CallCenterAssignment = typeof callCenterAssignments.$inferSelect;
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
 export type Notification = typeof notifications.$inferSelect;
 
+export type InsertEscrowPayment = z.infer<typeof insertEscrowPaymentSchema>;
+export type EscrowPayment = typeof escrowPayments.$inferSelect;
+
+export type InsertWorkCompletionPhoto = z.infer<typeof insertWorkCompletionPhotoSchema>;
+export type WorkCompletionPhoto = typeof workCompletionPhotos.$inferSelect;
+
+export type InsertProviderBankAccount = z.infer<typeof insertProviderBankAccountSchema>;
+export type ProviderBankAccount = typeof providerBankAccounts.$inferSelect;
+
 // User role types
 export type UserRole = typeof userRoles[keyof typeof userRoles];
+
+// Payment status types
+export type PaymentStatus = typeof paymentStatuses[keyof typeof paymentStatuses];
 
 // Extended provider type with user info
 export type ServiceProviderWithUser = ServiceProvider & {

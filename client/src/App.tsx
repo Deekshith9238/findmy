@@ -16,6 +16,8 @@ import AdminUserManagement from "@/pages/admin-user-management";
 import DemoPage from "@/pages/demo-page";
 import ServiceMapPage from "@/pages/service-map";
 import CreateTaskPage from "@/pages/create-task-page";
+import PaymentPage from "@/pages/payment-page";
+import PaymentApprovalsPage from "@/pages/payment-approvals";
 import { ProtectedRoute } from "./lib/protected-route";
 import { AuthProvider } from "./hooks/use-auth";
 
@@ -34,6 +36,8 @@ function Router() {
       <ProtectedRoute path="/admin-dashboard" component={AdminDashboard} />
       <ProtectedRoute path="/admin/users" component={AdminUserManagement} />
       <ProtectedRoute path="/profile" component={ProfilePage} />
+      <ProtectedRoute path="/payment/:serviceRequestId" component={PaymentPage} />
+      <ProtectedRoute path="/payment-approvals" component={PaymentApprovalsPage} />
       <Route component={NotFound} />
     </Switch>
   );
