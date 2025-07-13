@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
-import { setupAuth } from "./auth";
+import { setupAuth, hashPassword } from "./auth";
 import { pool, db } from "./db";
 import { z } from "zod";
 import { serviceProviders } from "@shared/schema";
@@ -877,9 +877,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: 'Username or email already exists' });
       }
 
+      // Hash the password before creating the user
+      const hashedPassword = await hashPassword(validatedData.password);
+      
       // Set createdBy to admin user ID
       const userWithCreator = {
         ...validatedData,
+        password: hashedPassword,
         createdBy: req.user.id
       };
 

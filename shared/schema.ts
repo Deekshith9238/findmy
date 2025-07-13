@@ -409,8 +409,8 @@ export const insertUserWithBankSchema = insertUserSchema.extend({
   bankAccountType: z.enum(['checking', 'savings']),
 });
 
-// Payment approver schema - can only be created by admin
-export const insertPaymentApproverSchema = insertUserWithBankSchema.extend({
+// Payment approver schema - can only be created by admin (no bank details required)
+export const insertPaymentApproverSchema = insertUserSchema.extend({
   role: z.literal(userRoles.PAYMENT_APPROVER),
   createdBy: z.number().positive("Payment approvers must be created by admin"),
 });
