@@ -216,6 +216,8 @@ Changelog:
 - July 13, 2025. Built payment components: PaymentForm, WorkCompletionForm, PaymentApprovalDashboard, BankAccountSetup
 - July 13, 2025. Added payment processing flow: client pays → held in escrow → work completion → approval → payout
 - July 13, 2025. Integrated platform fees (15%), tax calculations (8%), and secure Stripe Connect payouts
+- July 13, 2025. Updated payment approver creation: removed bank details requirement for payment approvers
+- July 13, 2025. Clarified bank details are only required for clients and service providers for refund/payout purposes
 ```
 
 ## User Preferences

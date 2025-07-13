@@ -861,20 +861,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     
     try {
-      // Use different validation schemas based on role
-      let validatedData;
-      if (req.body.role === 'payment_approver') {
-        validatedData = insertPaymentApproverSchema.parse({
-          ...req.body,
-          createdBy: req.user.id
-        });
-      } else {
-        validatedData = insertUserSchema.parse(req.body);
-        
-        // Only allow creating service_verifier and call_center roles (not payment_approver)
-        if (!['service_verifier', 'call_center'].includes(validatedData.role)) {
-          return res.status(400).json({ message: 'Invalid role specified' });
-        }
+      // Use insertUserSchema for all staff roles (service_verifier, call_center, payment_approver)
+      const validatedData = insertUserSchema.parse(req.body);
+      
+      // Only allow creating service_verifier, call_center, and payment_approver roles
+      if (!['service_verifier', 'call_center', 'payment_approver'].includes(validatedData.role)) {
+        return res.status(400).json({ message: 'Invalid role specified' });
       }
       
       // Check if username or email already exists
@@ -951,8 +943,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: 'User not found' });
       }
 
-      // Only allow deleting service_verifier and call_center roles
-      if (!['service_verifier', 'call_center'].includes(user.role)) {
+      // Only allow deleting service_verifier, call_center, and payment_approver roles
+      if (!['service_verifier', 'call_center', 'payment_approver'].includes(user.role)) {
         return res.status(400).json({ message: 'Can only delete staff accounts' });
       }
       

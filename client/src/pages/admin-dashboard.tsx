@@ -26,20 +26,6 @@ const createUserSchema = z.object({
     required_error: "Please select a role",
   }),
   phoneNumber: z.string().optional(),
-  // Bank details - required for payment approvers
-  bankAccountHolderName: z.string().optional(),
-  bankName: z.string().optional(),
-  bankAccountNumber: z.string().optional(),
-  bankRoutingNumber: z.string().optional(),
-  bankAccountType: z.enum(['checking', 'savings']).optional(),
-}).refine(data => {
-  if (data.role === 'payment_approver') {
-    return data.bankAccountHolderName && data.bankName && data.bankAccountNumber && data.bankRoutingNumber && data.bankAccountType;
-  }
-  return true;
-}, {
-  message: "Bank details are required for payment approvers",
-  path: ["bankAccountHolderName"]
 });
 
 type CreateUserFormValues = z.infer<typeof createUserSchema>;
@@ -59,11 +45,6 @@ export default function AdminDashboard() {
       lastName: "",
       role: "service_verifier",
       phoneNumber: "",
-      bankAccountHolderName: "",
-      bankName: "",
-      bankAccountNumber: "",
-      bankRoutingNumber: "",
-      bankAccountType: "checking",
     },
   });
 
@@ -347,96 +328,6 @@ export default function AdminDashboard() {
                     </FormItem>
                   )}
                 />
-
-                {/* Bank Details Section - Required for Payment Approvers */}
-                {form.watch("role") === "payment_approver" && (
-                  <div className="space-y-4 border-t pt-4">
-                    <h3 className="text-lg font-semibold">Bank Details</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Bank information is required for payment approvers.
-                    </p>
-                    
-                    <FormField
-                      control={form.control}
-                      name="bankAccountHolderName"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Account Holder Name</FormLabel>
-                          <FormControl>
-                            <Input placeholder="Full name on bank account" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name="bankName"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Bank Name</FormLabel>
-                          <FormControl>
-                            <Input placeholder="Chase Bank, Bank of America, etc." {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <FormField
-                        control={form.control}
-                        name="bankAccountNumber"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Account Number</FormLabel>
-                            <FormControl>
-                              <Input placeholder="1234567890" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="bankRoutingNumber"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Routing Number</FormLabel>
-                            <FormControl>
-                              <Input placeholder="123456789" maxLength={9} {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-
-                    <FormField
-                      control={form.control}
-                      name="bankAccountType"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Account Type</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select account type" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="checking">Checking</SelectItem>
-                              <SelectItem value="savings">Savings</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                )}
 
                 <Button
                   type="submit"
