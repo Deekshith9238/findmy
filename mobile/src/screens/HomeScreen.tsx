@@ -7,6 +7,8 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
+  Dimensions,
+  FlatList,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../contexts/AuthContext';
@@ -15,26 +17,25 @@ import { useLocation } from '../contexts/LocationContext';
 import { useNavigation } from '@react-navigation/native';
 import { tasksApi, providersApi, categoriesApi } from '../utils/api';
 import { Task, ServiceProvider, ServiceCategory } from '../types';
+import ServiceCategoryCard from '../components/ServiceCategoryCard';
+import ServiceProviderCard from '../components/ServiceProviderCard';
+
+const { width } = Dimensions.get('window');
 
 const HomeScreen: React.FC = () => {
+  const { user, isLoading: authLoading } = useAuth();
+  const { notifications } = useNotifications();
+  const { location } = useLocation();
   const navigation = useNavigation();
-  const { user } = useAuth();
-  const { unreadCount } = useNotifications();
-  const { location, getCurrentLocation } = useLocation();
-  
+  const [refreshing, setRefreshing] = useState(false);
   const [recentTasks, setRecentTasks] = useState<Task[]>([]);
   const [nearbyProviders, setNearbyProviders] = useState<ServiceProvider[]>([]);
   const [categories, setCategories] = useState<ServiceCategory[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const [loadingData, setLoadingData] = useState(true);
 
-  useEffect(() => {
-    loadHomeData();
-  }, []);
-
-  const loadHomeData = async () => {
+  const loadData = async () => {
     try {
-      setIsLoading(true);
+      setLoadingData(true);
       
       // Load categories
       const categoriesData = await categoriesApi.getAll();
@@ -50,175 +51,29 @@ const HomeScreen: React.FC = () => {
         return;
       }
 
-      // Load nearby providers if location is available
-      if (location) {
-        const providersData = await providersApi.getNearby(
-          location.latitude,
-          location.longitude,
-          10
-        );
-        setNearbyProviders(providersData?.slice(0, 5) || []);
-      }
+      // Load nearby providers
+      const providersData = await providersApi.getAll();
+      setNearbyProviders(providersData?.slice(0, 5) || []);
     } catch (error) {
       console.error('Error loading home data:', error);
     } finally {
-      setIsLoading(false);
+      setLoadingData(false);
     }
   };
+
+  useEffect(() => {
+    if (user && !authLoading) {
+      loadData();
+    }
+  }, [user, authLoading]);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadHomeData();
-    await getCurrentLocation();
+    await loadData();
     setRefreshing(false);
   };
 
-  const renderQuickActions = () => (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>Quick Actions</Text>
-      <View style={styles.quickActions}>
-        {user?.role === 'client' ? (
-          <>
-            <TouchableOpacity
-              style={styles.actionButton}
-              onPress={() => navigation.navigate('CreateTask' as never)}
-            >
-              <Ionicons name="add-circle" size={24} color="#3B82F6" />
-              <Text style={styles.actionButtonText}>Post Task</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.actionButton}
-              onPress={() => navigation.navigate('Services' as never)}
-            >
-              <Ionicons name="search" size={24} color="#3B82F6" />
-              <Text style={styles.actionButtonText}>Find Services</Text>
-            </TouchableOpacity>
-          </>
-        ) : (
-          <>
-            <TouchableOpacity
-              style={styles.actionButton}
-              onPress={() => navigation.navigate('Tasks' as never)}
-            >
-              <Ionicons name="list" size={24} color="#3B82F6" />
-              <Text style={styles.actionButtonText}>Browse Tasks</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.actionButton}
-              onPress={() => navigation.navigate('Map' as never)}
-            >
-              <Ionicons name="map" size={24} color="#3B82F6" />
-              <Text style={styles.actionButtonText}>View Map</Text>
-            </TouchableOpacity>
-          </>
-        )}
-      </View>
-    </View>
-  );
-
-  const renderCategories = () => (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>Service Categories</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoriesScroll}>
-        {categories.map((category) => (
-          <TouchableOpacity
-            key={category.id}
-            style={styles.categoryCard}
-            onPress={() => navigation.navigate('Services' as never, { categoryId: category.id })}
-          >
-            <View style={styles.categoryIcon}>
-              <Ionicons name="build" size={24} color="#3B82F6" />
-            </View>
-            <Text style={styles.categoryName}>{category.name}</Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-    </View>
-  );
-
-  const renderRecentTasks = () => {
-    if (user?.role !== 'client' || recentTasks.length === 0) return null;
-
-    return (
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Recent Tasks</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Tasks' as never)}>
-            <Text style={styles.seeAllText}>See All</Text>
-          </TouchableOpacity>
-        </View>
-        {recentTasks.map((task) => (
-          <TouchableOpacity
-            key={task.id}
-            style={styles.taskCard}
-            onPress={() => navigation.navigate('TaskDetail' as never, { taskId: task.id })}
-          >
-            <View style={styles.taskHeader}>
-              <Text style={styles.taskTitle}>{task.title}</Text>
-              <View style={[styles.statusBadge, { backgroundColor: getStatusColor(task.status) }]}>
-                <Text style={styles.statusText}>{task.status}</Text>
-              </View>
-            </View>
-            <Text style={styles.taskDescription} numberOfLines={2}>
-              {task.description}
-            </Text>
-            {task.budget && (
-              <Text style={styles.taskBudget}>Budget: ${task.budget}</Text>
-            )}
-          </TouchableOpacity>
-        ))}
-      </View>
-    );
-  };
-
-  const renderNearbyProviders = () => {
-    if (nearbyProviders.length === 0) return null;
-
-    return (
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Nearby Providers</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Services' as never)}>
-            <Text style={styles.seeAllText}>See All</Text>
-          </TouchableOpacity>
-        </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          {nearbyProviders.map((provider) => (
-            <TouchableOpacity
-              key={provider.id}
-              style={styles.providerCard}
-              onPress={() => navigation.navigate('ServiceProviderDetail' as never, { providerId: provider.id })}
-            >
-              <View style={styles.providerAvatar}>
-                <Ionicons name="person" size={24} color="#6b7280" />
-              </View>
-              <Text style={styles.providerName} numberOfLines={1}>
-                Provider #{provider.id}
-              </Text>
-              <Text style={styles.providerRate}>${provider.hourlyRate}/hr</Text>
-              {provider.rating && (
-                <View style={styles.rating}>
-                  <Ionicons name="star" size={12} color="#fbbf24" />
-                  <Text style={styles.ratingText}>{provider.rating.toFixed(1)}</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
-    );
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'active': return '#10b981';
-      case 'pending': return '#f59e0b';
-      case 'completed': return '#3b82f6';
-      default: return '#6b7280';
-    }
-  };
-
-  if (isLoading) {
+  if (authLoading || loadingData) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#3B82F6" />
@@ -227,36 +82,190 @@ const HomeScreen: React.FC = () => {
     );
   }
 
+  const renderCategoryItem = ({ item }: { item: ServiceCategory }) => (
+    <ServiceCategoryCard 
+      category={item} 
+      onPress={() => navigation.navigate('Services' as never, { categoryId: item.id })}
+    />
+  );
+
+  const renderProviderItem = ({ item }: { item: ServiceProvider }) => (
+    <ServiceProviderCard 
+      provider={item} 
+      onPress={() => navigation.navigate('ServiceProviderDetail' as never, { providerId: item.id })}
+    />
+  );
+
+  const getStatusColor = (status: string) => {
+    switch (status.toLowerCase()) {
+      case 'pending':
+        return '#FEF3C7';
+      case 'in_progress':
+        return '#DBEAFE';
+      case 'completed':
+        return '#D1FAE5';
+      case 'cancelled':
+        return '#FEE2E2';
+      default:
+        return '#F3F4F6';
+    }
+  };
+
   return (
     <ScrollView
       style={styles.container}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+      }
     >
-      {/* Header */}
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.greeting}>Hello, {user?.firstName || 'User'}!</Text>
-          <Text style={styles.subGreeting}>
-            {user?.role === 'client' ? 'What can we help you with today?' : 'Ready to help someone today?'}
-          </Text>
-        </View>
-        <TouchableOpacity
-          style={styles.notificationButton}
-          onPress={() => navigation.navigate('Notifications' as never)}
+      {/* Hero Section */}
+      <View style={styles.heroSection}>
+        <Text style={styles.heroTitle}>
+          Find Your Perfect Helper
+        </Text>
+        <Text style={styles.heroSubtitle}>
+          Connect with trusted local service providers for all your needs
+        </Text>
+        <TouchableOpacity 
+          style={styles.heroButton}
+          onPress={() => navigation.navigate('CreateTask' as never)}
         >
-          <Ionicons name="notifications" size={24} color="#374151" />
-          {unreadCount > 0 && (
-            <View style={styles.notificationBadge}>
-              <Text style={styles.notificationBadgeText}>{unreadCount}</Text>
-            </View>
-          )}
+          <Text style={styles.heroButtonText}>Post a Task</Text>
+          <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
 
-      {renderQuickActions()}
-      {renderCategories()}
-      {renderRecentTasks()}
-      {renderNearbyProviders()}
+      {/* Quick Stats */}
+      <View style={styles.statsSection}>
+        <View style={styles.statItem}>
+          <Text style={styles.statNumber}>1,500+</Text>
+          <Text style={styles.statLabel}>Happy Clients</Text>
+        </View>
+        <View style={styles.statItem}>
+          <Text style={styles.statNumber}>800+</Text>
+          <Text style={styles.statLabel}>Service Providers</Text>
+        </View>
+        <View style={styles.statItem}>
+          <Text style={styles.statNumber}>5,000+</Text>
+          <Text style={styles.statLabel}>Tasks Completed</Text>
+        </View>
+      </View>
+
+      {/* Service Categories */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Popular Services</Text>
+        <Text style={styles.sectionSubtitle}>Browse by category to find the right service for you</Text>
+        <FlatList
+          data={categories}
+          renderItem={renderCategoryItem}
+          keyExtractor={(item) => item.id.toString()}
+          numColumns={2}
+          scrollEnabled={false}
+          contentContainerStyle={styles.categoriesGrid}
+        />
+      </View>
+
+      {/* Featured Providers */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Featured Providers</Text>
+          <TouchableOpacity onPress={() => navigation.navigate('Services' as never)}>
+            <Text style={styles.seeAllText}>See All</Text>
+          </TouchableOpacity>
+        </View>
+        <Text style={styles.sectionSubtitle}>Top-rated professionals ready to help</Text>
+        <FlatList
+          data={nearbyProviders}
+          renderItem={renderProviderItem}
+          keyExtractor={(item) => item.id.toString()}
+          scrollEnabled={false}
+        />
+      </View>
+
+      {/* Recent Activity */}
+      {user?.role === 'client' && recentTasks.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Recent Tasks</Text>
+          {recentTasks.map((task) => (
+            <TouchableOpacity
+              key={task.id}
+              style={styles.taskCard}
+              onPress={() => navigation.navigate('TaskDetail' as never, { taskId: task.id })}
+            >
+              <View style={styles.taskHeader}>
+                <Text style={styles.taskTitle}>{task.title}</Text>
+                <View style={[styles.statusBadge, { backgroundColor: getStatusColor(task.status) }]}>
+                  <Text style={styles.statusText}>{task.status}</Text>
+                </View>
+              </View>
+              <Text style={styles.taskDescription} numberOfLines={2}>
+                {task.description}
+              </Text>
+              <View style={styles.taskFooter}>
+                <Text style={styles.taskLocation}>
+                  <Ionicons name="location-outline" size={14} color="#6B7280" />
+                  {task.location}
+                </Text>
+                {task.budget && (
+                  <Text style={styles.taskBudget}>
+                    ${task.budget}
+                  </Text>
+                )}
+              </View>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
+      {/* Quick Actions */}
+      <View style={styles.quickActionsSection}>
+        <Text style={styles.sectionTitle}>Quick Actions</Text>
+        <View style={styles.quickActionsGrid}>
+          <TouchableOpacity 
+            style={styles.actionCard}
+            onPress={() => navigation.navigate('CreateTask' as never)}
+          >
+            <View style={styles.actionIcon}>
+              <Ionicons name="add-circle" size={32} color="#3B82F6" />
+            </View>
+            <Text style={styles.actionTitle}>Post Task</Text>
+            <Text style={styles.actionSubtitle}>Get help with your tasks</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={styles.actionCard}
+            onPress={() => navigation.navigate('Services' as never)}
+          >
+            <View style={styles.actionIcon}>
+              <Ionicons name="people" size={32} color="#059669" />
+            </View>
+            <Text style={styles.actionTitle}>Find Providers</Text>
+            <Text style={styles.actionSubtitle}>Browse service providers</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={styles.actionCard}
+            onPress={() => navigation.navigate('Map' as never)}
+          >
+            <View style={styles.actionIcon}>
+              <Ionicons name="map" size={32} color="#7C3AED" />
+            </View>
+            <Text style={styles.actionTitle}>Map View</Text>
+            <Text style={styles.actionSubtitle}>See nearby services</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={styles.actionCard}
+            onPress={() => navigation.navigate('Tasks' as never)}
+          >
+            <View style={styles.actionIcon}>
+              <Ionicons name="list" size={32} color="#F59E0B" />
+            </View>
+            <Text style={styles.actionTitle}>My Tasks</Text>
+            <Text style={styles.actionSubtitle}>Manage your tasks</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
     </ScrollView>
   );
 };
@@ -264,131 +273,116 @@ const HomeScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f9fafb',
+    backgroundColor: '#F9FAFB',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f9fafb',
+    backgroundColor: '#F9FAFB',
   },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: '#6b7280',
+    color: '#6B7280',
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  heroSection: {
+    backgroundColor: '#3B82F6',
+    padding: 24,
     alignItems: 'center',
-    padding: 20,
-    paddingTop: 60,
-    backgroundColor: '#fff',
+    marginBottom: 24,
   },
-  greeting: {
+  heroTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  heroSubtitle: {
+    fontSize: 16,
+    color: '#E0E7FF',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 24,
+  },
+  heroButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 25,
+  },
+  heroButtonText: {
+    color: '#3B82F6',
+    fontSize: 16,
+    fontWeight: '600',
+    marginRight: 8,
+  },
+  statsSection: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingHorizontal: 16,
+    marginBottom: 24,
+  },
+  statItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  statNumber: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#1f2937',
+    color: '#3B82F6',
+    marginBottom: 4,
   },
-  subGreeting: {
+  statLabel: {
     fontSize: 14,
-    color: '#6b7280',
-    marginTop: 4,
-  },
-  notificationButton: {
-    position: 'relative',
-    padding: 8,
-  },
-  notificationBadge: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    backgroundColor: '#ef4444',
-    borderRadius: 10,
-    minWidth: 20,
-    height: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  notificationBadgeText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: 'bold',
+    color: '#6B7280',
+    textAlign: 'center',
   },
   section: {
-    backgroundColor: '#fff',
-    margin: 16,
-    borderRadius: 12,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#111827',
+    marginBottom: 8,
+    paddingHorizontal: 16,
+  },
+  sectionSubtitle: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 16,
+    paddingHorizontal: 16,
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1f2937',
+    paddingHorizontal: 16,
+    marginBottom: 8,
   },
   seeAllText: {
     color: '#3B82F6',
     fontSize: 14,
-    fontWeight: '500',
-  },
-  quickActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-  },
-  actionButton: {
-    alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#f3f4f6',
-    borderRadius: 12,
-    flex: 1,
-    marginHorizontal: 8,
-  },
-  actionButtonText: {
-    marginTop: 8,
-    fontSize: 12,
     fontWeight: '600',
-    color: '#374151',
   },
-  categoriesScroll: {
-    marginHorizontal: -20,
-    paddingHorizontal: 20,
-  },
-  categoryCard: {
-    alignItems: 'center',
-    marginRight: 16,
-    width: 80,
-  },
-  categoryIcon: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: '#f3f4f6',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  categoryName: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#374151',
-    textAlign: 'center',
+  categoriesGrid: {
+    paddingHorizontal: 16,
   },
   taskCard: {
-    backgroundColor: '#f9fafb',
-    borderRadius: 8,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
     padding: 16,
-    marginBottom: 12,
+    marginVertical: 4,
+    marginHorizontal: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   taskHeader: {
     flexDirection: 'row',
@@ -399,8 +393,9 @@ const styles = StyleSheet.create({
   taskTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1f2937',
+    color: '#111827',
     flex: 1,
+    marginRight: 8,
   },
   statusBadge: {
     paddingHorizontal: 8,
@@ -408,55 +403,66 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   statusText: {
-    color: '#fff',
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '600',
-    textTransform: 'uppercase',
+    color: '#374151',
   },
   taskDescription: {
     fontSize: 14,
-    color: '#6b7280',
+    color: '#6B7280',
     marginBottom: 8,
+    lineHeight: 20,
+  },
+  taskFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  taskLocation: {
+    fontSize: 12,
+    color: '#6B7280',
   },
   taskBudget: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '600',
     color: '#059669',
   },
-  providerCard: {
-    alignItems: 'center',
-    marginRight: 16,
-    width: 100,
+  quickActionsSection: {
+    marginBottom: 24,
   },
-  providerAvatar: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: '#f3f4f6',
-    justifyContent: 'center',
+  quickActionsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+  },
+  actionCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    width: (width - 48) / 2,
+    marginBottom: 12,
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  actionIcon: {
     marginBottom: 8,
   },
-  providerName: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#374151',
+  actionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 4,
     textAlign: 'center',
-    marginBottom: 4,
   },
-  providerRate: {
+  actionSubtitle: {
     fontSize: 12,
-    color: '#6b7280',
-    marginBottom: 4,
-  },
-  rating: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  ratingText: {
-    fontSize: 12,
-    color: '#374151',
-    marginLeft: 2,
+    color: '#6B7280',
+    textAlign: 'center',
   },
 });
 

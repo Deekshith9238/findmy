@@ -3,239 +3,361 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
+  FlatList,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   RefreshControl,
+  Alert,
+  Modal,
+  ScrollView,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../contexts/AuthContext';
-import { paymentsApi } from '../utils/api';
+import { apiRequest } from '../utils/api';
 
-interface PaymentStats {
-  totalPendingPayments: number;
-  totalCompletedPayments: number;
-  totalPaymentValue: number;
-  pendingPaymentValue: number;
-}
-
-interface PendingPayment {
+interface EscrowPayment {
   id: number;
+  serviceRequestId: number;
   amount: number;
   platformFee: number;
-  payoutAmount: number;
+  tax: number;
+  totalAmount: number;
   status: string;
   createdAt: string;
   serviceRequest: {
     id: number;
-    message: string;
+    title: string;
+    description: string;
+    clientId: number;
+    providerId: number;
     client: {
       firstName: string;
       lastName: string;
+      email: string;
     };
     provider: {
       firstName: string;
       lastName: string;
+      email: string;
     };
   };
+  workCompletionPhotos: Array<{
+    id: number;
+    photoUrl: string;
+    description: string;
+    createdAt: string;
+  }>;
 }
 
 const PaymentApproverScreen: React.FC = () => {
+  const navigation = useNavigation();
   const { user } = useAuth();
-  const [stats, setStats] = useState<PaymentStats | null>(null);
-  const [pendingPayments, setPendingPayments] = useState<PendingPayment[]>([]);
+  const [payments, setPayments] = useState<EscrowPayment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedPayment, setSelectedPayment] = useState<EscrowPayment | null>(null);
+  const [modalVisible, setModalVisible] = useState(false);
 
-  useEffect(() => {
-    if (user?.role === 'payment_approver') {
-      loadPaymentData();
-    }
-  }, [user]);
-
-  const loadPaymentData = async () => {
+  const loadPayments = async () => {
     try {
       setIsLoading(true);
-      
-      // Load payment statistics
-      const statsResponse = await paymentsApi.getStats();
-      setStats(statsResponse);
-      
-      // Load pending payments
-      const pendingResponse = await paymentsApi.getPendingPayments();
-      setPendingPayments(pendingResponse || []);
-      
+      const response = await apiRequest('GET', '/api/payments/pending');
+      setPayments(response);
     } catch (error) {
-      console.error('Error loading payment data:', error);
-      Alert.alert('Error', 'Failed to load payment data');
+      console.error('Error loading payments:', error);
+      Alert.alert('Error', 'Failed to load payments. Please try again.');
     } finally {
       setIsLoading(false);
     }
   };
 
+  useEffect(() => {
+    if (user?.role === 'payment_approver') {
+      loadPayments();
+    }
+  }, [user]);
+
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadPaymentData();
+    await loadPayments();
     setRefreshing(false);
   };
 
-  const handleApprovePayment = async (paymentId: number) => {
+  const handlePaymentAction = async (paymentId: number, action: 'approve' | 'reject', reason?: string) => {
     try {
-      await paymentsApi.approvePayment(paymentId);
-      Alert.alert('Success', 'Payment approved successfully');
-      loadPaymentData();
+      await apiRequest('POST', `/api/payments/${paymentId}/${action}`, {
+        reason: reason || null
+      });
+      
+      Alert.alert(
+        'Success',
+        `Payment ${action}d successfully`,
+        [{ text: 'OK' }]
+      );
+      
+      setModalVisible(false);
+      setSelectedPayment(null);
+      loadPayments();
     } catch (error) {
-      console.error('Error approving payment:', error);
-      Alert.alert('Error', 'Failed to approve payment');
+      console.error(`Error ${action}ing payment:`, error);
+      Alert.alert('Error', `Failed to ${action} payment. Please try again.`);
     }
   };
 
-  const handleRejectPayment = async (paymentId: number) => {
-    try {
-      await paymentsApi.rejectPayment(paymentId);
-      Alert.alert('Success', 'Payment rejected successfully');
-      loadPaymentData();
-    } catch (error) {
-      console.error('Error rejecting payment:', error);
-      Alert.alert('Error', 'Failed to reject payment');
+  const showPaymentDetails = (payment: EscrowPayment) => {
+    setSelectedPayment(payment);
+    setModalVisible(true);
+  };
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+    }).format(amount);
+  };
+
+  const formatDate = (date: string) => {
+    return new Date(date).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status.toLowerCase()) {
+      case 'pending':
+        return '#FEF3C7';
+      case 'approved':
+        return '#D1FAE5';
+      case 'rejected':
+        return '#FEE2E2';
+      default:
+        return '#F3F4F6';
     }
   };
 
-  if (user?.role !== 'payment_approver') {
-    return (
-      <View style={styles.container}>
-        <View style={styles.accessDenied}>
-          <Ionicons name="lock-closed" size={48} color="#EF4444" />
-          <Text style={styles.accessDeniedText}>Access Denied</Text>
-          <Text style={styles.accessDeniedSubtext}>
-            You don't have permission to access this section
+  const getStatusTextColor = (status: string) => {
+    switch (status.toLowerCase()) {
+      case 'pending':
+        return '#F59E0B';
+      case 'approved':
+        return '#059669';
+      case 'rejected':
+        return '#EF4444';
+      default:
+        return '#6B7280';
+    }
+  };
+
+  const renderPaymentItem = ({ item }: { item: EscrowPayment }) => (
+    <TouchableOpacity
+      style={styles.paymentCard}
+      onPress={() => showPaymentDetails(item)}
+    >
+      <View style={styles.paymentHeader}>
+        <Text style={styles.paymentTitle}>{item.serviceRequest.title}</Text>
+        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
+          <Text style={[styles.statusText, { color: getStatusTextColor(item.status) }]}>
+            {item.status}
           </Text>
         </View>
       </View>
-    );
-  }
+      
+      <Text style={styles.paymentDescription} numberOfLines={2}>
+        {item.serviceRequest.description}
+      </Text>
+      
+      <View style={styles.paymentDetails}>
+        <View style={styles.detailRow}>
+          <Text style={styles.detailLabel}>Client:</Text>
+          <Text style={styles.detailValue}>
+            {item.serviceRequest.client.firstName} {item.serviceRequest.client.lastName}
+          </Text>
+        </View>
+        <View style={styles.detailRow}>
+          <Text style={styles.detailLabel}>Provider:</Text>
+          <Text style={styles.detailValue}>
+            {item.serviceRequest.provider.firstName} {item.serviceRequest.provider.lastName}
+          </Text>
+        </View>
+        <View style={styles.detailRow}>
+          <Text style={styles.detailLabel}>Amount:</Text>
+          <Text style={styles.amountText}>{formatCurrency(item.totalAmount)}</Text>
+        </View>
+      </View>
+      
+      <View style={styles.paymentFooter}>
+        <Text style={styles.dateText}>
+          {formatDate(item.createdAt)}
+        </Text>
+        <View style={styles.photoIndicator}>
+          <Ionicons name="images" size={16} color="#6B7280" />
+          <Text style={styles.photoCount}>
+            {item.workCompletionPhotos.length} photos
+          </Text>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+
+  const renderPaymentModal = () => (
+    <Modal
+      animationType="slide"
+      transparent={true}
+      visible={modalVisible}
+      onRequestClose={() => setModalVisible(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Payment Details</Text>
+            <TouchableOpacity onPress={() => setModalVisible(false)}>
+              <Ionicons name="close" size={24} color="#6B7280" />
+            </TouchableOpacity>
+          </View>
+          
+          {selectedPayment && (
+            <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Service Request</Text>
+                <Text style={styles.serviceTitle}>{selectedPayment.serviceRequest.title}</Text>
+                <Text style={styles.serviceDescription}>
+                  {selectedPayment.serviceRequest.description}
+                </Text>
+              </View>
+              
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Payment Breakdown</Text>
+                <View style={styles.paymentBreakdown}>
+                  <View style={styles.breakdownRow}>
+                    <Text style={styles.breakdownLabel}>Service Amount:</Text>
+                    <Text style={styles.breakdownValue}>{formatCurrency(selectedPayment.amount)}</Text>
+                  </View>
+                  <View style={styles.breakdownRow}>
+                    <Text style={styles.breakdownLabel}>Platform Fee (15%):</Text>
+                    <Text style={styles.breakdownValue}>{formatCurrency(selectedPayment.platformFee)}</Text>
+                  </View>
+                  <View style={styles.breakdownRow}>
+                    <Text style={styles.breakdownLabel}>Tax (8%):</Text>
+                    <Text style={styles.breakdownValue}>{formatCurrency(selectedPayment.tax)}</Text>
+                  </View>
+                  <View style={[styles.breakdownRow, styles.totalRow]}>
+                    <Text style={styles.totalLabel}>Total Amount:</Text>
+                    <Text style={styles.totalValue}>{formatCurrency(selectedPayment.totalAmount)}</Text>
+                  </View>
+                </View>
+              </View>
+              
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Parties</Text>
+                <View style={styles.partyInfo}>
+                  <Text style={styles.partyLabel}>Client:</Text>
+                  <Text style={styles.partyName}>
+                    {selectedPayment.serviceRequest.client.firstName} {selectedPayment.serviceRequest.client.lastName}
+                  </Text>
+                  <Text style={styles.partyEmail}>
+                    {selectedPayment.serviceRequest.client.email}
+                  </Text>
+                </View>
+                <View style={styles.partyInfo}>
+                  <Text style={styles.partyLabel}>Provider:</Text>
+                  <Text style={styles.partyName}>
+                    {selectedPayment.serviceRequest.provider.firstName} {selectedPayment.serviceRequest.provider.lastName}
+                  </Text>
+                  <Text style={styles.partyEmail}>
+                    {selectedPayment.serviceRequest.provider.email}
+                  </Text>
+                </View>
+              </View>
+              
+              {selectedPayment.workCompletionPhotos.length > 0 && (
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>Work Completion Photos</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    {selectedPayment.workCompletionPhotos.map((photo, index) => (
+                      <View key={photo.id} style={styles.photoContainer}>
+                        <Image
+                          source={{ uri: photo.photoUrl }}
+                          style={styles.photo}
+                          resizeMode="cover"
+                        />
+                        <Text style={styles.photoDescription} numberOfLines={2}>
+                          {photo.description}
+                        </Text>
+                      </View>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
+            </ScrollView>
+          )}
+          
+          {selectedPayment?.status === 'pending' && (
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.rejectButton}
+                onPress={() => handlePaymentAction(selectedPayment.id, 'reject')}
+              >
+                <Text style={styles.rejectButtonText}>Reject</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.approveButton}
+                onPress={() => handlePaymentAction(selectedPayment.id, 'approve')}
+              >
+                <Text style={styles.approveButtonText}>Approve</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      </View>
+    </Modal>
+  );
 
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#3B82F6" />
-        <Text style={styles.loadingText}>Loading payment data...</Text>
+        <Text style={styles.loadingText}>Loading payments...</Text>
       </View>
     );
   }
 
   return (
-    <ScrollView 
-      style={styles.container}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-      }
-    >
+    <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Payment Approver Dashboard</Text>
-        <Text style={styles.subtitle}>Manage payment approvals</Text>
+        <Text style={styles.headerTitle}>Payment Approvals</Text>
+        <Text style={styles.headerSubtitle}>
+          {payments.length} payment{payments.length !== 1 ? 's' : ''} pending review
+        </Text>
       </View>
 
-      {/* Stats Cards */}
-      {stats && (
-        <View style={styles.statsContainer}>
-          <View style={styles.statsRow}>
-            <View style={styles.statCard}>
-              <View style={[styles.statIcon, { backgroundColor: '#FEF3C7' }]}>
-                <Ionicons name="time" size={20} color="#F59E0B" />
-              </View>
-              <Text style={styles.statValue}>{stats.totalPendingPayments}</Text>
-              <Text style={styles.statLabel}>Pending</Text>
-            </View>
-            
-            <View style={styles.statCard}>
-              <View style={[styles.statIcon, { backgroundColor: '#D1FAE5' }]}>
-                <Ionicons name="checkmark-circle" size={20} color="#10B981" />
-              </View>
-              <Text style={styles.statValue}>{stats.totalCompletedPayments}</Text>
-              <Text style={styles.statLabel}>Completed</Text>
-            </View>
+      <FlatList
+        data={payments}
+        renderItem={renderPaymentItem}
+        keyExtractor={(item) => item.id.toString()}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+        contentContainerStyle={styles.listContainer}
+        showsVerticalScrollIndicator={false}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Ionicons name="checkmark-circle-outline" size={64} color="#9CA3AF" />
+            <Text style={styles.emptyTitle}>No pending payments</Text>
+            <Text style={styles.emptySubtitle}>
+              All payments have been reviewed and processed.
+            </Text>
           </View>
+        }
+      />
 
-          <View style={styles.statsRow}>
-            <View style={styles.statCard}>
-              <View style={[styles.statIcon, { backgroundColor: '#DBEAFE' }]}>
-                <Ionicons name="card" size={20} color="#3B82F6" />
-              </View>
-              <Text style={styles.statValue}>${stats.totalPaymentValue}</Text>
-              <Text style={styles.statLabel}>Total Value</Text>
-            </View>
-            
-            <View style={styles.statCard}>
-              <View style={[styles.statIcon, { backgroundColor: '#FEE2E2' }]}>
-                <Ionicons name="hourglass" size={20} color="#EF4444" />
-              </View>
-              <Text style={styles.statValue}>${stats.pendingPaymentValue}</Text>
-              <Text style={styles.statLabel}>Pending Value</Text>
-            </View>
-          </View>
-        </View>
-      )}
-
-      {/* Pending Payments */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Pending Payments</Text>
-        
-        {pendingPayments.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Ionicons name="checkmark-circle" size={48} color="#10B981" />
-            <Text style={styles.emptyStateText}>No pending payments</Text>
-            <Text style={styles.emptyStateSubtext}>All payments are up to date</Text>
-          </View>
-        ) : (
-          pendingPayments.map((payment) => (
-            <View key={payment.id} style={styles.paymentCard}>
-              <View style={styles.paymentHeader}>
-                <Text style={styles.paymentAmount}>${payment.amount}</Text>
-                <Text style={styles.paymentStatus}>{payment.status}</Text>
-              </View>
-              
-              <View style={styles.paymentDetails}>
-                <Text style={styles.paymentText}>
-                  Client: {payment.serviceRequest.client.firstName} {payment.serviceRequest.client.lastName}
-                </Text>
-                <Text style={styles.paymentText}>
-                  Provider: {payment.serviceRequest.provider.firstName} {payment.serviceRequest.provider.lastName}
-                </Text>
-                <Text style={styles.paymentText}>
-                  Service: {payment.serviceRequest.message}
-                </Text>
-                <Text style={styles.paymentText}>
-                  Platform Fee: ${payment.platformFee}
-                </Text>
-                <Text style={styles.paymentText}>
-                  Payout Amount: ${payment.payoutAmount}
-                </Text>
-              </View>
-
-              <View style={styles.paymentActions}>
-                <TouchableOpacity
-                  style={[styles.actionButton, styles.approveButton]}
-                  onPress={() => handleApprovePayment(payment.id)}
-                >
-                  <Ionicons name="checkmark" size={16} color="#FFFFFF" />
-                  <Text style={styles.actionButtonText}>Approve</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity
-                  style={[styles.actionButton, styles.rejectButton]}
-                  onPress={() => handleRejectPayment(payment.id)}
-                >
-                  <Ionicons name="close" size={16} color="#FFFFFF" />
-                  <Text style={styles.actionButtonText}>Reject</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          ))
-        )}
-      </View>
-    </ScrollView>
+      {renderPaymentModal()}
+    </View>
   );
 };
 
@@ -251,171 +373,277 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9FAFB',
   },
   loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: '#6B7280',
-  },
-  accessDenied: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  accessDeniedText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#EF4444',
     marginTop: 16,
-  },
-  accessDeniedSubtext: {
     fontSize: 16,
     color: '#6B7280',
-    textAlign: 'center',
-    marginTop: 8,
   },
   header: {
-    padding: 20,
+    padding: 16,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
   },
-  title: {
+  headerTitle: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#111827',
+    marginBottom: 4,
   },
-  subtitle: {
-    fontSize: 16,
-    color: '#6B7280',
-    marginTop: 4,
-  },
-  statsContainer: {
-    padding: 20,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    padding: 16,
-    borderRadius: 8,
-    marginHorizontal: 4,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  statIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  statValue: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#111827',
-  },
-  statLabel: {
+  headerSubtitle: {
     fontSize: 14,
     color: '#6B7280',
-    marginTop: 4,
   },
-  section: {
-    padding: 20,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#111827',
-    marginBottom: 16,
-  },
-  emptyState: {
-    alignItems: 'center',
-    padding: 40,
-  },
-  emptyStateText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#111827',
-    marginTop: 16,
-  },
-  emptyStateSubtext: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginTop: 8,
-    textAlign: 'center',
+  listContainer: {
+    paddingBottom: 16,
   },
   paymentCard: {
     backgroundColor: '#FFFFFF',
+    marginHorizontal: 16,
+    marginVertical: 8,
     padding: 16,
-    borderRadius: 8,
-    marginBottom: 12,
+    borderRadius: 12,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   paymentHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
   },
-  paymentAmount: {
-    fontSize: 20,
-    fontWeight: 'bold',
+  paymentTitle: {
+    fontSize: 18,
+    fontWeight: '600',
     color: '#111827',
+    flex: 1,
+    marginRight: 12,
   },
-  paymentStatus: {
-    fontSize: 14,
-    color: '#F59E0B',
-    backgroundColor: '#FEF3C7',
+  statusBadge: {
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 4,
-    overflow: 'hidden',
+    borderRadius: 12,
   },
-  paymentDetails: {
-    marginBottom: 16,
+  statusText: {
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'capitalize',
   },
-  paymentText: {
+  paymentDescription: {
     fontSize: 14,
     color: '#6B7280',
-    marginBottom: 4,
+    lineHeight: 20,
+    marginBottom: 12,
   },
-  paymentActions: {
+  paymentDetails: {
+    marginBottom: 12,
+  },
+  detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    marginBottom: 4,
   },
-  actionButton: {
-    flex: 1,
+  detailLabel: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  detailValue: {
+    fontSize: 14,
+    color: '#111827',
+    fontWeight: '500',
+  },
+  amountText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#059669',
+  },
+  paymentFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  dateText: {
+    fontSize: 12,
+    color: '#9CA3AF',
+  },
+  photoIndicator: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 6,
-    marginHorizontal: 4,
   },
-  approveButton: {
-    backgroundColor: '#10B981',
+  photoCount: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginLeft: 4,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+    paddingTop: 64,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#111827',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '90%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  modalBody: {
+    padding: 16,
+  },
+  section: {
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 12,
+  },
+  serviceTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  serviceDescription: {
+    fontSize: 14,
+    color: '#6B7280',
+    lineHeight: 20,
+  },
+  paymentBreakdown: {
+    backgroundColor: '#F9FAFB',
+    padding: 16,
+    borderRadius: 8,
+  },
+  breakdownRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  breakdownLabel: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  breakdownValue: {
+    fontSize: 14,
+    color: '#111827',
+    fontWeight: '500',
+  },
+  totalRow: {
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    paddingTop: 8,
+    marginTop: 8,
+  },
+  totalLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  totalValue: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#059669',
+  },
+  partyInfo: {
+    marginBottom: 16,
+  },
+  partyLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  partyName: {
+    fontSize: 16,
+    color: '#111827',
+    marginBottom: 2,
+  },
+  partyEmail: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  photoContainer: {
+    width: 120,
+    marginRight: 12,
+  },
+  photo: {
+    width: 120,
+    height: 120,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  photoDescription: {
+    fontSize: 12,
+    color: '#6B7280',
+    lineHeight: 16,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    paddingBottom: 32,
   },
   rejectButton: {
-    backgroundColor: '#EF4444',
+    flex: 1,
+    backgroundColor: '#FEE2E2',
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginRight: 8,
+    alignItems: 'center',
   },
-  actionButtonText: {
-    color: '#FFFFFF',
+  rejectButtonText: {
+    color: '#EF4444',
+    fontSize: 16,
     fontWeight: '600',
-    marginLeft: 4,
+  },
+  approveButton: {
+    flex: 1,
+    backgroundColor: '#3B82F6',
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginLeft: 8,
+    alignItems: 'center',
+  },
+  approveButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 
