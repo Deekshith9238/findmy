@@ -22,6 +22,7 @@ import CreateTaskScreen from './src/screens/CreateTaskScreen';
 import TaskDetailScreen from './src/screens/TaskDetailScreen';
 import ServiceProviderDetailScreen from './src/screens/ServiceProviderDetailScreen';
 import NotificationsScreen from './src/screens/NotificationsScreen';
+import PaymentApproverScreen from './src/screens/PaymentApproverScreen';
 
 // Components
 import ProtectedRoute from './src/components/ProtectedRoute';
@@ -112,6 +113,15 @@ function AppNavigator() {
           options={{ 
             headerShown: true, 
             title: 'Notifications',
+            headerBackTitleVisible: false 
+          }}
+        />
+        <Stack.Screen 
+          name="PaymentApprover" 
+          component={PaymentApproverScreen}
+          options={{ 
+            headerShown: true, 
+            title: 'Payment Approver',
             headerBackTitleVisible: false 
           }}
         />

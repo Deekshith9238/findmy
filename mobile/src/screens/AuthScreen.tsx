@@ -26,7 +26,7 @@ const AuthScreen: React.FC = () => {
     firstName: '',
     lastName: '',
     phoneNumber: '',
-    role: 'client' as 'client' | 'service_provider',
+    role: 'client' as 'client' | 'service_provider' | 'payment_approver' | 'service_verifier' | 'call_center' | 'admin',
   });
 
   const { login, register } = useAuth();

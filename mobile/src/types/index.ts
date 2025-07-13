@@ -119,6 +119,7 @@ export type RootStackParamList = {
   TaskDetail: { taskId: number };
   ServiceProviderDetail: { providerId: number };
   Notifications: undefined;
+  PaymentApprover: undefined;
 };
 
 export type TabParamList = {
@@ -159,7 +160,7 @@ export interface RegisterData {
   password: string;
   firstName: string;
   lastName: string;
-  role: 'client' | 'service_provider';
+  role: 'client' | 'service_provider' | 'payment_approver' | 'service_verifier' | 'call_center' | 'admin';
   phoneNumber?: string;
   categoryId?: number;
   hourlyRate?: number;

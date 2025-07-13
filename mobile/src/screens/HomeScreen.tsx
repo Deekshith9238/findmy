@@ -44,6 +44,10 @@ const HomeScreen: React.FC = () => {
         // Load recent tasks for clients
         const tasksData = await tasksApi.getByClient(user.id);
         setRecentTasks(tasksData?.slice(0, 3) || []);
+      } else if (user?.role === 'payment_approver') {
+        // For payment approvers, redirect to payment approver screen
+        navigation.navigate('PaymentApprover' as never);
+        return;
       }
 
       // Load nearby providers if location is available

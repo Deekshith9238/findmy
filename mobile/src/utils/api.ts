@@ -195,6 +195,25 @@ export const reviewsApi = {
     }),
 };
 
+// Payments API
+export const paymentsApi = {
+  getStats: () => apiRequest('/payments/stats'),
+  getPendingPayments: () => apiRequest('/payments/pending'),
+  approvePayment: (paymentId: number) =>
+    apiRequest(`/payments/${paymentId}/approve`, {
+      method: 'POST',
+    }),
+  rejectPayment: (paymentId: number) =>
+    apiRequest(`/payments/${paymentId}/reject`, {
+      method: 'POST',
+    }),
+  createPaymentIntent: (serviceRequestId: number, amount: number) =>
+    apiRequest('/payments/create-intent', {
+      method: 'POST',
+      body: JSON.stringify({ serviceRequestId, amount }),
+    }),
+};
+
 // Storage utilities
 export const storage = {
   setItem: (key: string, value: string) => SecureStore.setItemAsync(key, value),
