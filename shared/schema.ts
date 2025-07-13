@@ -27,6 +27,13 @@ export const users = pgTable("users", {
   latitude: doublePrecision("latitude"),
   longitude: doublePrecision("longitude"),
   address: text("address"),
+  // Bank details for refund purposes
+  bankAccountHolderName: text("bank_account_holder_name"),
+  bankName: text("bank_name"),
+  bankAccountNumber: text("bank_account_number"),
+  bankRoutingNumber: text("bank_routing_number"),
+  bankAccountType: text("bank_account_type"), // 'checking' or 'savings'
+  isBankAccountVerified: boolean("is_bank_account_verified").notNull().default(false),
   isActive: boolean("is_active").notNull().default(true),
   createdBy: integer("created_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
@@ -389,7 +396,23 @@ export const notificationsRelations = relations(notifications, ({ one }) => ({
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
-  createdAt: true
+  createdAt: true,
+  updatedAt: true
+});
+
+// Extended user schema with mandatory bank details
+export const insertUserWithBankSchema = insertUserSchema.extend({
+  bankAccountHolderName: z.string().min(1, "Bank account holder name is required"),
+  bankName: z.string().min(1, "Bank name is required"),
+  bankAccountNumber: z.string().min(4, "Bank account number is required"),
+  bankRoutingNumber: z.string().length(9, "Routing number must be 9 digits"),
+  bankAccountType: z.enum(['checking', 'savings']),
+});
+
+// Payment approver schema - can only be created by admin
+export const insertPaymentApproverSchema = insertUserWithBankSchema.extend({
+  role: z.literal(userRoles.PAYMENT_APPROVER),
+  createdBy: z.number().positive("Payment approvers must be created by admin"),
 });
 
 export const insertServiceCategorySchema = createInsertSchema(serviceCategories).omit({
@@ -455,6 +478,8 @@ export const insertProviderBankAccountSchema = createInsertSchema(providerBankAc
 
 // Types
 export type InsertUser = z.infer<typeof insertUserSchema>;
+export type InsertUserWithBank = z.infer<typeof insertUserWithBankSchema>;
+export type InsertPaymentApprover = z.infer<typeof insertPaymentApproverSchema>;
 export type User = typeof users.$inferSelect;
 
 export type InsertServiceCategory = z.infer<typeof insertServiceCategorySchema>;

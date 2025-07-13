@@ -12,6 +12,8 @@ import {
   insertServiceRequestSchema,
   insertReviewSchema,
   insertUserSchema,
+  insertUserWithBankSchema,
+  insertPaymentApproverSchema,
   insertNotificationSchema,
   insertEscrowPaymentSchema,
   insertWorkCompletionPhotoSchema,
@@ -859,7 +861,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     
     try {
-      const validatedData = insertUserSchema.parse(req.body);
+      // Use different validation schemas based on role
+      let validatedData;
+      if (req.body.role === 'payment_approver') {
+        validatedData = insertPaymentApproverSchema.parse({
+          ...req.body,
+          createdBy: req.user.id
+        });
+      } else {
+        validatedData = insertUserSchema.parse(req.body);
+        
+        // Only allow creating service_verifier and call_center roles (not payment_approver)
+        if (!['service_verifier', 'call_center'].includes(validatedData.role)) {
+          return res.status(400).json({ message: 'Invalid role specified' });
+        }
+      }
       
       // Check if username or email already exists
       const existingUser = await storage.getUserByUsername(validatedData.username) || 
@@ -867,11 +883,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       if (existingUser) {
         return res.status(400).json({ message: 'Username or email already exists' });
-      }
-
-      // Only allow creating service_verifier and call_center roles
-      if (!['service_verifier', 'call_center'].includes(validatedData.role)) {
-        return res.status(400).json({ message: 'Invalid role specified' });
       }
 
       // Set createdBy to admin user ID

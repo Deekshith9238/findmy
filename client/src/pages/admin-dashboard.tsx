@@ -12,7 +12,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Users, UserPlus, Shield, Phone, Settings, Database, UserCheck } from "lucide-react";
+import { Users, UserPlus, Shield, Phone, Settings, Database, UserCheck, DollarSign } from "lucide-react";
 import MainLayout from "@/components/MainLayout";
 import { Link } from "wouter";
 
@@ -22,10 +22,24 @@ const createUserSchema = z.object({
   password: z.string().min(6, "Password must be at least 6 characters"),
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
-  role: z.enum(["service_verifier", "call_center"], {
+  role: z.enum(["service_verifier", "call_center", "payment_approver"], {
     required_error: "Please select a role",
   }),
   phoneNumber: z.string().optional(),
+  // Bank details - required for payment approvers
+  bankAccountHolderName: z.string().optional(),
+  bankName: z.string().optional(),
+  bankAccountNumber: z.string().optional(),
+  bankRoutingNumber: z.string().optional(),
+  bankAccountType: z.enum(['checking', 'savings']).optional(),
+}).refine(data => {
+  if (data.role === 'payment_approver') {
+    return data.bankAccountHolderName && data.bankName && data.bankAccountNumber && data.bankRoutingNumber && data.bankAccountType;
+  }
+  return true;
+}, {
+  message: "Bank details are required for payment approvers",
+  path: ["bankAccountHolderName"]
 });
 
 type CreateUserFormValues = z.infer<typeof createUserSchema>;
@@ -45,6 +59,11 @@ export default function AdminDashboard() {
       lastName: "",
       role: "service_verifier",
       phoneNumber: "",
+      bankAccountHolderName: "",
+      bankName: "",
+      bankAccountNumber: "",
+      bankRoutingNumber: "",
+      bankAccountType: "checking",
     },
   });
 
@@ -156,7 +175,7 @@ export default function AdminDashboard() {
         </div>
 
         {/* Admin Stats Overview */}
-        <div className="grid md:grid-cols-3 gap-6">
+        <div className="grid md:grid-cols-4 gap-6">
           <Card>
             <CardContent className="pt-6">
               <div className="flex items-center gap-3">
@@ -184,6 +203,18 @@ export default function AdminDashboard() {
           <Card>
             <CardContent className="pt-6">
               <div className="flex items-center gap-3">
+                <DollarSign className="h-8 w-8 text-orange-500" />
+                <div>
+                  <p className="text-sm text-muted-foreground">Payment Approvers</p>
+                  <p className="text-2xl font-bold">{staffUsers?.filter((user: any) => user.role === 'payment_approver').length || 0}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-3">
                 <Database className="h-8 w-8 text-purple-500" />
                 <div>
                   <p className="text-sm text-muted-foreground">Total Staff</p>
@@ -203,7 +234,7 @@ export default function AdminDashboard() {
               Create Staff Account
             </CardTitle>
             <CardDescription>
-              Create accounts for service verifiers and call center staff
+              Create accounts for service verifiers, call center staff, and payment approvers
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -295,6 +326,7 @@ export default function AdminDashboard() {
                         <SelectContent>
                           <SelectItem value="service_verifier">Service Verifier</SelectItem>
                           <SelectItem value="call_center">Call Center Staff</SelectItem>
+                          <SelectItem value="payment_approver">Payment Approver</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -316,6 +348,96 @@ export default function AdminDashboard() {
                   )}
                 />
 
+                {/* Bank Details Section - Required for Payment Approvers */}
+                {form.watch("role") === "payment_approver" && (
+                  <div className="space-y-4 border-t pt-4">
+                    <h3 className="text-lg font-semibold">Bank Details</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Bank information is required for payment approvers.
+                    </p>
+                    
+                    <FormField
+                      control={form.control}
+                      name="bankAccountHolderName"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Account Holder Name</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Full name on bank account" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="bankName"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Bank Name</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Chase Bank, Bank of America, etc." {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="bankAccountNumber"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Account Number</FormLabel>
+                            <FormControl>
+                              <Input placeholder="1234567890" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="bankRoutingNumber"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Routing Number</FormLabel>
+                            <FormControl>
+                              <Input placeholder="123456789" maxLength={9} {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+
+                    <FormField
+                      control={form.control}
+                      name="bankAccountType"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Account Type</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select account type" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="checking">Checking</SelectItem>
+                              <SelectItem value="savings">Savings</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                )}
+
                 <Button
                   type="submit"
                   className="w-full"
@@ -336,7 +458,7 @@ export default function AdminDashboard() {
               Staff Members
             </CardTitle>
             <CardDescription>
-              Manage existing service verifiers and call center staff
+              Manage existing service verifiers, call center staff, and payment approvers
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -354,8 +476,10 @@ export default function AdminDashboard() {
                     <div className="flex items-center gap-3">
                       {user.role === "service_verifier" ? (
                         <Shield className="h-5 w-5 text-blue-500" />
-                      ) : (
+                      ) : user.role === "call_center" ? (
                         <Phone className="h-5 w-5 text-green-500" />
+                      ) : (
+                        <DollarSign className="h-5 w-5 text-orange-500" />
                       )}
                       <div>
                         <p className="font-medium">
