@@ -68,6 +68,10 @@ export default function MainLayout({ children }: MainLayoutProps) {
                   <Link href="/admin-dashboard" className="font-medium hover:text-primary transition-colors">
                     Admin Dashboard
                   </Link>
+                ) : user.role === 'payment_approver' ? (
+                  <Link href="/payment-approver-dashboard" className="font-medium hover:text-primary transition-colors">
+                    Dashboard
+                  </Link>
                 ) : isProvider ? (
                   <Link href="/provider-dashboard" className="font-medium hover:text-primary transition-colors">
                     Dashboard
@@ -152,6 +156,10 @@ export default function MainLayout({ children }: MainLayoutProps) {
                       {isAdmin ? (
                         <Link href="/admin-dashboard" className="font-medium hover:text-primary transition-colors" onClick={() => setMobileMenuOpen(false)}>
                           Admin Dashboard
+                        </Link>
+                      ) : user.role === 'payment_approver' ? (
+                        <Link href="/payment-approver-dashboard" className="font-medium hover:text-primary transition-colors" onClick={() => setMobileMenuOpen(false)}>
+                          Dashboard
                         </Link>
                       ) : isProvider ? (
                         <Link href="/provider-dashboard" className="font-medium hover:text-primary transition-colors" onClick={() => setMobileMenuOpen(false)}>

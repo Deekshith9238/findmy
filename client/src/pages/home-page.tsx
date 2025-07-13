@@ -255,7 +255,17 @@ export default function HomePage() {
           >
             {user ? (
               <Button
-                onClick={() => setLocation('/client-dashboard')}
+                onClick={() => {
+                  if (user.role === 'admin') {
+                    setLocation('/admin-dashboard');
+                  } else if (user.role === 'payment_approver') {
+                    setLocation('/payment-approver-dashboard');
+                  } else if (user.role === 'service_provider') {
+                    setLocation('/provider-dashboard');
+                  } else {
+                    setLocation('/client-dashboard');
+                  }
+                }}
                 size="lg"
                 className="bg-white text-primary hover:bg-white/90 font-semibold py-4 px-8 rounded-full transition-all duration-300 hover:scale-105"
               >

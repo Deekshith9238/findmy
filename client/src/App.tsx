@@ -18,6 +18,7 @@ import ServiceMapPage from "@/pages/service-map";
 import CreateTaskPage from "@/pages/create-task-page";
 import PaymentPage from "@/pages/payment-page";
 import PaymentApprovalsPage from "@/pages/payment-approvals";
+import PaymentApproverDashboard from "@/pages/payment-approver-dashboard";
 import { ProtectedRoute } from "./lib/protected-route";
 import { AuthProvider } from "./hooks/use-auth";
 
@@ -38,6 +39,7 @@ function Router() {
       <ProtectedRoute path="/profile" component={ProfilePage} />
       <ProtectedRoute path="/payment/:serviceRequestId" component={PaymentPage} />
       <ProtectedRoute path="/payment-approvals" component={PaymentApprovalsPage} />
+      <ProtectedRoute path="/payment-approver-dashboard" component={PaymentApproverDashboard} />
       <Route component={NotFound} />
     </Switch>
   );
