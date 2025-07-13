@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,10 +14,10 @@ import {
   FileText,
   TrendingUp,
   Users,
-  Calendar
+  Calendar,
+  ArrowLeft
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
-import { useLocation } from "wouter";
 import PaymentApprovalDashboard from "@/components/PaymentApprovalDashboard";
 
 export default function PaymentApproverDashboard() {
@@ -62,6 +63,15 @@ export default function PaymentApproverDashboard() {
           {/* Header */}
           <div className="mb-8">
             <div className="flex items-center gap-3 mb-6">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => navigate('/')}
+                className="flex items-center gap-2"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                Back to Home
+              </Button>
               <Shield className="w-8 h-8 text-primary" />
               <div>
                 <h1 className="text-3xl font-bold">Payment Approver Dashboard</h1>

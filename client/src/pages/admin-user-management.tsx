@@ -90,6 +90,7 @@ export default function AdminUserManagement() {
   const clients = users.filter(user => user.role === 'client');
   const providers = users.filter(user => user.role === 'service_provider');
   const staff = users.filter(user => ['service_verifier', 'call_center'].includes(user.role));
+  const paymentApprovers = users.filter(user => user.role === 'payment_approver');
 
   const filteredUsers = users.filter(user => {
     const matchesSearch = 
@@ -125,6 +126,12 @@ export default function AdminUserManagement() {
           user.lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
           user.email.toLowerCase().includes(searchTerm.toLowerCase())
         );
+      case 'payment_approvers':
+        return paymentApprovers.filter(user => 
+          user.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          user.lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          user.email.toLowerCase().includes(searchTerm.toLowerCase())
+        );
       default:
         return filteredUsers;
     }
@@ -142,6 +149,8 @@ export default function AdminUserManagement() {
         return 'bg-purple-100 text-purple-800 border-purple-200';
       case 'call_center':
         return 'bg-orange-100 text-orange-800 border-orange-200';
+      case 'payment_approver':
+        return 'bg-yellow-100 text-yellow-800 border-yellow-200';
       default:
         return 'bg-gray-100 text-gray-800 border-gray-200';
     }
@@ -189,7 +198,7 @@ export default function AdminUserManagement() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center space-x-3">
@@ -235,6 +244,20 @@ export default function AdminUserManagement() {
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center space-x-3">
+                <div className="p-2 bg-yellow-100 rounded-lg">
+                  <Mail className="w-5 h-5 text-yellow-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Payment Approvers</p>
+                  <p className="text-2xl font-bold text-gray-900">{paymentApprovers.length}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center space-x-3">
                 <div className="p-2 bg-gray-100 rounded-lg">
                   <Users className="w-5 h-5 text-gray-600" />
                 </div>
@@ -272,6 +295,7 @@ export default function AdminUserManagement() {
                     <SelectItem value="service_provider">Service Providers</SelectItem>
                     <SelectItem value="service_verifier">Service Verifiers</SelectItem>
                     <SelectItem value="call_center">Call Center</SelectItem>
+                    <SelectItem value="payment_approver">Payment Approvers</SelectItem>
                     <SelectItem value="admin">Admins</SelectItem>
                   </SelectContent>
                 </Select>
@@ -282,11 +306,12 @@ export default function AdminUserManagement() {
 
         {/* User Tabs */}
         <Tabs value={selectedTab} onValueChange={setSelectedTab}>
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="all">All Users ({users.length})</TabsTrigger>
             <TabsTrigger value="clients">Clients ({clients.length})</TabsTrigger>
             <TabsTrigger value="providers">Providers ({providers.length})</TabsTrigger>
             <TabsTrigger value="staff">Staff ({staff.length})</TabsTrigger>
+            <TabsTrigger value="payment_approvers">Payment Approvers ({paymentApprovers.length})</TabsTrigger>
           </TabsList>
 
           <TabsContent value={selectedTab} className="space-y-4">
@@ -299,6 +324,7 @@ export default function AdminUserManagement() {
                     {selectedTab === 'clients' && 'Client Users'}
                     {selectedTab === 'providers' && 'Service Providers'}
                     {selectedTab === 'staff' && 'Staff Members'}
+                    {selectedTab === 'payment_approvers' && 'Payment Approvers'}
                   </span>
                   <Badge variant="outline">
                     {displayUsers.length} users
