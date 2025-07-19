@@ -192,7 +192,7 @@ export default function HomePage() {
             transition={{ duration: 1 }}
           >
             <h1 className="text-5xl md:text-7xl font-bold mb-6 bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent">
-              Find Your Helper
+              Find My Helper
             </h1>
             <motion.p
               initial={{ opacity: 0, y: 20 }}
