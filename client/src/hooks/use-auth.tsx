@@ -56,7 +56,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       
       // Redirect based on user type
-      if (user.role === "service_provider") {
+      if (user.role === "admin") {
+        setLocation("/admin-dashboard");
+      } else if (user.role === "payment_approver") {
+        setLocation("/payment-approver-dashboard");
+      } else if (user.role === "service_provider") {
         setLocation("/provider-dashboard");
       } else {
         setLocation("/client-dashboard");
@@ -95,7 +99,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       
       // Redirect based on user type
-      if (data.role === "service_provider") {
+      if (data.role === "admin") {
+        setLocation("/admin-dashboard");
+      } else if (data.role === "payment_approver") {
+        setLocation("/payment-approver-dashboard");
+      } else if (data.role === "service_provider") {
         setLocation("/provider-dashboard");
       } else {
         setLocation("/client-dashboard");
@@ -141,10 +149,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         logoutMutation,
         registerMutation,
         isProvider: user?.role === "service_provider" || false,
-        isAdmin: user?.email === "findmyhelper2025@gmail.com" || false,
+        isAdmin: user?.role === "admin" || false,
         isServiceVerifier: user?.role === "service_verifier" || false,
         isCallCenter: user?.role === "call_center" || false,
-        canCreateRoles: user?.email === "findmyhelper2025@gmail.com" || false,
+        canCreateRoles: user?.role === "admin" || false,
       }}
     >
       {children}
