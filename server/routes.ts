@@ -170,21 +170,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // Login successful - create session
-      req.login(user, (err) => {
-        if (err) {
-          return res.status(500).json({ message: "Login failed" });
-        }
-        res.json({ 
-          message: "Login successful", 
-          user: { 
-            id: user.id, 
-            email: user.email, 
-            firstName: user.firstName, 
-            lastName: user.lastName,
-            role: user.role 
-          } 
-        });
+      // Login successful - create session manually
+      req.session.user = {
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role
+      };
+      
+      res.json({ 
+        message: "Login successful", 
+        user: { 
+          id: user.id, 
+          email: user.email, 
+          firstName: user.firstName, 
+          lastName: user.lastName,
+          role: user.role 
+        } 
       });
     } catch (error) {
       console.error('Login error:', error);

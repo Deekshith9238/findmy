@@ -28,7 +28,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={HomePage} />
-      <Route path="/auth" component={AuthPage} />
+      <Route path="/auth" component={() => <AuthPage />} />
       <Route path="/otp-auth" component={OTPLogin} />
       <Route path="/service-categories" component={ServiceCategories} />
       <Route path="/provider/:id" component={ServiceProviderProfile} />
