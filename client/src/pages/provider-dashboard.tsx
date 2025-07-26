@@ -23,6 +23,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import BankAccountSetup from "@/components/BankAccountSetup";
+import BidSubmissionDialog from "@/components/BidSubmissionDialog";
 
 // Task request schema
 const taskRequestSchema = z.object({
@@ -91,7 +92,34 @@ export default function ProviderDashboard() {
       workOrder.client.id !== user?.id
   );
 
-  // Mutation for creating a service request
+  // Mutation for submitting bids (FieldNation functionality)
+  const submitBidMutation = useMutation({
+    mutationFn: async (data: { workOrderId: number; bidAmount: number; proposalMessage: string }) => {
+      return apiRequest("POST", `/api/work-orders/${data.workOrderId}/bids`, {
+        bidAmount: data.bidAmount,
+        proposalMessage: data.proposalMessage,
+        estimatedCompletionDays: 1
+      });
+    },
+    onSuccess: () => {
+      toast({
+        title: "Bid Submitted Successfully",
+        description: "Your bid has been submitted to the client for review."
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/work-orders/available"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/provider/work-orders"] });
+      setTaskDialogOpen(false);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to Submit Bid",
+        description: error.message || "An error occurred while submitting your bid.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Mutation for creating a service request (legacy)
   const createRequestMutation = useMutation({
     mutationFn: async (data: TaskRequestValues & { taskId: number }) => {
       const requestData = {
