@@ -368,10 +368,12 @@ export class MemStorage implements IStorage {
       createdAt, 
       completedAt: null,
       status: task.status || "open",
-      budget: task.budget !== undefined ? task.budget : null,
-      latitude: task.latitude !== undefined ? task.latitude : null,
-      longitude: task.longitude !== undefined ? task.longitude : null,
-      location: task.location !== undefined ? task.location : null
+      budget: task.budget || null,
+      latitude: task.latitude || null,
+      longitude: task.longitude || null,
+      location: task.location || null,
+      scheduledDate: task.scheduledDate || null,
+      scheduledTime: task.scheduledTime || null
     };
     this.tasks.set(id, newTask);
     return newTask;
@@ -786,8 +788,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createTask(task: InsertTask): Promise<Task> {
-    const [newTask] = await db.insert(tasks).values(task).returning();
-    return newTask;
+    try {
+      console.log('DatabaseStorage: Creating task with data:', task);
+      const [newTask] = await db.insert(tasks).values(task).returning();
+      console.log('DatabaseStorage: Task created successfully:', newTask);
+      return newTask;
+    } catch (error) {
+      console.error('DatabaseStorage: Error creating task:', error);
+      throw error;
+    }
   }
 
   async getTask(id: number): Promise<Task | undefined> {
@@ -800,7 +809,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getTasksByClient(clientId: number): Promise<Task[]> {
-    return db.select().from(tasks).where(eq(tasks.clientId, clientId));
+    try {
+      console.log('DatabaseStorage: Getting tasks for client:', clientId);
+      const clientTasks = await db.select().from(tasks).where(eq(tasks.clientId, clientId));
+      console.log('DatabaseStorage: Found tasks:', clientTasks.length);
+      return clientTasks;
+    } catch (error) {
+      console.error('DatabaseStorage: Error getting tasks for client:', error);
+      throw error;
+    }
   }
 
   async getTasksByCategory(categoryId: number): Promise<Task[]> {

@@ -614,7 +614,11 @@ export const insertTaskSchema = createInsertSchema(tasks).omit({
   createdAt: true,
   completedAt: true
 }).extend({
-  location: z.string().optional()
+  location: z.string().optional(),
+  latitude: z.number().optional(),
+  longitude: z.number().optional(),
+  scheduledDate: z.string().optional(),
+  scheduledTime: z.string().optional()
 });
 
 export const insertServiceRequestSchema = createInsertSchema(serviceRequests).omit({
