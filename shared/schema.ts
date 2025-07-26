@@ -357,8 +357,6 @@ export const tasks = pgTable("tasks", {
   latitude: doublePrecision("latitude"),
   longitude: doublePrecision("longitude"),
   budget: doublePrecision("budget"),
-  scheduledDate: text("scheduled_date"),
-  scheduledTime: text("scheduled_time"),
   status: text("status").notNull().default("open"),
   createdAt: timestamp("created_at").defaultNow(),
   completedAt: timestamp("completed_at"),
