@@ -112,35 +112,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: "OTP sent successfully", 
         email: email.replace(/(.{3}).*(@.*)/, '$1***$2') // Mask email for security
       });
-
-  // Initialize session middleware for OTP authentication (MUST be before routes)
-  app.use(session({
-    secret: process.env.SESSION_SECRET || 'your-secret-key',
-    resave: false,
-    saveUninitialized: false,
-    cookie: { secure: false, maxAge: 24 * 60 * 60 * 1000 } // 24 hours
-  }));
-
-  // Initialize passport for session management
-  app.use(passport.initialize());
-  app.use(passport.session());
-
-  // Serialize/deserialize user for session
-  passport.serializeUser((user: any, done) => {
-    done(null, user.id);
-  });
-
-  passport.deserializeUser(async (id: any, done) => {
-    try {
-      const user = await storage.getUser(id);
-      done(null, user);
-    } catch (error) {
-      done(error, null);
-    }
-  });
-
-  // Authentication middleware
-  
     } catch (error) {
       console.error('Send OTP error:', error);
       res.status(500).json({ message: "Failed to send OTP" });
@@ -260,6 +231,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Login error:', error);
       res.status(500).json({ message: "Login failed" });
+    }
+  });
+
+  // Simple registration endpoint (non-OTP)
+  app.post("/api/register", async (req, res) => {
+    try {
+      const { email, password, firstName, lastName, role, username } = req.body;
+      
+      if (!email || !password || !firstName || !lastName || !username) {
+        return res.status(400).json({ message: "All fields are required" });
+      }
+
+      // Check if user already exists
+      const existingUser = await storage.getUserByEmail(email);
+      if (existingUser) {
+        return res.status(400).json({ message: "User already exists" });
+      }
+
+      // Create user
+      const hashedPassword = hashPassword(password);
+      const userData = insertUserSchema.parse({
+        username,
+        email,
+        password: hashedPassword,
+        firstName,
+        lastName,
+        role: role || 'client',
+        isEmailVerified: false
+      });
+
+      const user = await storage.createUser(userData);
+      
+      // Create session
+      if (!req.session) {
+        return res.status(500).json({ message: "Session not initialized" });
+      }
+      req.session.user = {
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        username: user.username,
+        role: user.role
+      };
+      
+      res.status(201).json({ 
+        message: "Registration successful", 
+        user: { 
+          id: user.id, 
+          email: user.email, 
+          firstName: user.firstName, 
+          lastName: user.lastName,
+          role: user.role 
+        } 
+      });
+    } catch (error) {
+      console.error('Registration error:', error);
+      res.status(500).json({ message: "Registration failed" });
     }
   });
 
