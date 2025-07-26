@@ -55,6 +55,40 @@ const PLATFORM_FEE_PERCENTAGE = 0.15; // 15% platform fee
 const TAX_RATE = 0.08; // 8% tax rate
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Initialize session middleware FIRST (critical for authentication)
+  app.use(session({
+    secret: process.env.SESSION_SECRET || 'your-secret-key',
+    resave: false,
+    saveUninitialized: false,
+    cookie: { secure: false, maxAge: 24 * 60 * 60 * 1000 } // 24 hours
+  }));
+
+  // Initialize passport for session management
+  app.use(passport.initialize());
+  app.use(passport.session());
+
+  // Serialize/deserialize user for session
+  passport.serializeUser((user: any, done) => {
+    done(null, user.id);
+  });
+
+  passport.deserializeUser(async (id: any, done) => {
+    try {
+      const user = await storage.getUser(id);
+      done(null, user);
+    } catch (error) {
+      done(error, null);
+    }
+  });
+
+  // User authentication status endpoint
+  app.get('/api/user', (req, res) => {
+    if (req.session && req.session.user) {
+      res.json(req.session.user);
+    } else {
+      res.status(401).json({ message: "Not authenticated" });
+    }
+  });
   // ==============================
   // OTP AUTHENTICATION ROUTES
   // ==============================
