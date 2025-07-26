@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import session from "express-session";
 import passport from "passport";
+import MemoryStore from "memorystore";
 import { storage } from "./storage";
 import { createOTP, verifyOTP, hashPassword, verifyPassword } from "./auth";
 import { pool, db } from "./db";
@@ -56,11 +57,20 @@ const TAX_RATE = 0.08; // 8% tax rate
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Initialize session middleware FIRST (critical for authentication)
+  const MemoryStoreSession = MemoryStore(session);
   app.use(session({
     secret: process.env.SESSION_SECRET || 'your-secret-key',
     resave: false,
-    saveUninitialized: false,
-    cookie: { secure: false, maxAge: 24 * 60 * 60 * 1000 } // 24 hours
+    saveUninitialized: true,
+    store: new MemoryStoreSession({
+      checkPeriod: 86400000 // prune expired entries every 24h
+    }),
+    cookie: { 
+      secure: false, 
+      maxAge: 24 * 60 * 60 * 1000, // 24 hours
+      httpOnly: false,  // Allow access from client
+      sameSite: 'lax'
+    }
   }));
 
   // Initialize passport for session management
@@ -234,6 +244,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Simple login endpoint (non-OTP) - for frontend compatibility
+  app.post("/api/login", async (req, res) => {
+    try {
+      const { email, password } = req.body;
+      
+      if (!email || !password) {
+        return res.status(400).json({ message: "Email and password are required" });
+      }
+
+      // Check if user exists
+      const user = await storage.getUserByEmail(email);
+      if (!user) {
+        return res.status(401).json({ message: "Invalid credentials" });
+      }
+
+      // Verify password
+      if (!verifyPassword(password, user.password)) {
+        return res.status(401).json({ message: "Invalid credentials" });
+      }
+
+      // Login successful - create session manually
+      if (!req.session) {
+        return res.status(500).json({ message: "Session not initialized" });
+      }
+      req.session.user = {
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        username: user.username,
+        role: user.role
+      };
+      
+      // Save session explicitly
+      req.session.save((err) => {
+        if (err) {
+          console.error('Session save error:', err);
+          return res.status(500).json({ message: "Session save failed" });
+        }
+        
+        res.json({ 
+          id: user.id, 
+          email: user.email, 
+          firstName: user.firstName, 
+          lastName: user.lastName,
+          username: user.username,
+          role: user.role 
+        });
+      });
+    } catch (error) {
+      console.error('Login error:', error);
+      res.status(500).json({ message: "Login failed" });
+    }
+  });
+
   // Simple registration endpoint (non-OTP)
   app.post("/api/register", async (req, res) => {
     try {
@@ -258,7 +323,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         firstName,
         lastName,
         role: role || 'client',
-        isEmailVerified: false
+        isEmailVerified: true
       });
 
       const user = await storage.createUser(userData);
