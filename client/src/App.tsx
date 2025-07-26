@@ -13,7 +13,7 @@ import ServiceProviderProfile from "@/pages/service-provider-profile";
 import ProfilePage from "@/pages/profile-page";
 import AdminDashboard from "@/pages/admin-dashboard";
 import AdminUserManagement from "@/pages/admin-user-management";
-import DemoPage from "@/pages/demo-page";
+
 import ServiceMapPage from "@/pages/service-map";
 import CreateTaskPage from "@/pages/create-task-page";
 import PaymentPage from "@/pages/payment-page";
@@ -30,7 +30,7 @@ function Router() {
       <Route path="/auth" component={AuthPage} />
       <Route path="/service-categories" component={ServiceCategories} />
       <Route path="/provider/:id" component={ServiceProviderProfile} />
-      <Route path="/demo" component={DemoPage} />
+
       <Route path="/map" component={ServiceMapPage} />
       <ProtectedRoute path="/create-task" component={CreateTaskPage} />
       <ProtectedRoute path="/client-dashboard" component={ClientDashboard} />

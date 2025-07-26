@@ -28,9 +28,9 @@ import {
   Clock, 
   Shield, 
   Zap,
-  Play,
+
   ChevronDown,
-  Sparkles
+
 } from "lucide-react";
 import { motion, useAnimation } from "framer-motion";
 
@@ -288,7 +288,7 @@ export default function HomePage() {
                   size="lg"
                   className="border-white/30 text-white hover:bg-white/10 font-semibold py-4 px-8 rounded-full transition-all duration-300 hover:scale-105"
                 >
-                  <Play className="w-5 h-5 mr-2" />
+                  <ChevronDown className="w-5 h-5 mr-2" />
                   See How It Works
                 </Button>
               </>
@@ -425,80 +425,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Video Demo Section */}
-      <section className="py-20 bg-black text-white relative overflow-hidden">
-        <div className="container mx-auto px-4">
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8 }}
-            viewport={{ once: true }}
-            className="text-center mb-16"
-          >
-            <h2 className="text-4xl font-bold mb-4">
-              See FindMyHelper in Action
-            </h2>
-            <p className="text-xl text-gray-300 max-w-2xl mx-auto">
-              Watch how easy it is to connect with service providers in your area
-            </p>
-          </motion.div>
 
-          <motion.div
-            initial={{ opacity: 0, scale: 0.8 }}
-            whileInView={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.8 }}
-            viewport={{ once: true }}
-            className="relative max-w-4xl mx-auto"
-          >
-            <div className="relative bg-gradient-to-br from-blue-900 to-purple-900 rounded-2xl p-8 aspect-video flex items-center justify-center">
-              {/* Video Placeholder with Animation */}
-              <motion.div
-                initial={{ scale: 0 }}
-                whileInView={{ scale: 1 }}
-                transition={{ duration: 0.5, delay: 0.3 }}
-                viewport={{ once: true }}
-                className="relative"
-              >
-                <div className="w-24 h-24 bg-white/20 rounded-full flex items-center justify-center cursor-pointer hover:bg-white/30 transition-all duration-300 hover:scale-110">
-                  <Play className="w-10 h-10 text-white ml-1" />
-                </div>
-                <motion.div
-                  animate={{ scale: [1, 1.5, 1], opacity: [0.5, 0, 0.5] }}
-                  transition={{ duration: 2, repeat: Infinity }}
-                  className="absolute inset-0 bg-white/20 rounded-full"
-                />
-              </motion.div>
-              
-              {/* Floating Elements */}
-              <motion.div
-                animate={{ y: [-10, 10, -10], rotate: [0, 5, 0] }}
-                transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-                className="absolute top-4 left-4 bg-green-500 text-white px-3 py-1 rounded-full text-sm font-semibold"
-              >
-                Task Posted ✓
-              </motion.div>
-              <motion.div
-                animate={{ y: [10, -10, 10], rotate: [0, -5, 0] }}
-                transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-                className="absolute top-4 right-4 bg-blue-500 text-white px-3 py-1 rounded-full text-sm font-semibold"
-              >
-                3 Providers Near You
-              </motion.div>
-              <motion.div
-                animate={{ x: [-5, 5, -5] }}
-                transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
-                className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-purple-500 text-white px-3 py-1 rounded-full text-sm font-semibold"
-              >
-                Call Center Verified ✓
-              </motion.div>
-            </div>
-            
-            <p className="text-center text-gray-400 mt-4">
-              Click to watch our 60-second demo
-            </p>
-          </motion.div>
-        </div>
-      </section>
 
       {/* How It Works Section */}
       <section id="how-it-works" className="py-20 bg-gradient-to-br from-blue-50 to-indigo-100">
@@ -754,121 +681,7 @@ export default function HomePage() {
         </section>
       )}
 
-      {/* Interactive Demo Section */}
-      <section className="py-20 bg-white relative overflow-hidden">
-        <div className="container mx-auto px-4">
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8 }}
-            viewport={{ once: true }}
-            className="text-center mb-16"
-          >
-            <h2 className="text-4xl font-bold text-gray-900 mb-4">
-              Experience the Magic
-            </h2>
-            <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-              Interactive demo showing our real-time notification system
-            </p>
-          </motion.div>
 
-          <div className="max-w-4xl mx-auto">
-            <div className="grid md:grid-cols-2 gap-8 items-center">
-              {/* Mock Phone Interface */}
-              <motion.div
-                initial={{ opacity: 0, x: -50 }}
-                whileInView={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.8 }}
-                viewport={{ once: true }}
-                className="relative"
-              >
-                <div className="bg-gray-900 rounded-3xl p-4 mx-auto max-w-sm">
-                  <div className="bg-white rounded-2xl overflow-hidden">
-                    <div className="bg-primary text-white p-4 text-center">
-                      <h3 className="font-semibold">FindMyHelper</h3>
-                    </div>
-                    <div className="p-4 space-y-3 h-96 overflow-hidden">
-                      {/* Animated Notifications */}
-                      {[
-                        { delay: 1, text: "New task posted: House Cleaning", type: "task" },
-                        { delay: 3, text: "3 providers responded", type: "response" },
-                        { delay: 5, text: "Call center verified provider", type: "verified" },
-                        { delay: 7, text: "Address details shared", type: "address" }
-                      ].map((notification, index) => (
-                        <motion.div
-                          key={index}
-                          initial={{ opacity: 0, y: 20, scale: 0.8 }}
-                          whileInView={{ opacity: 1, y: 0, scale: 1 }}
-                          transition={{ duration: 0.5, delay: notification.delay }}
-                          viewport={{ once: true }}
-                          className={`p-3 rounded-lg shadow-sm border-l-4 ${
-                            notification.type === 'task' ? 'bg-blue-50 border-blue-500' :
-                            notification.type === 'response' ? 'bg-green-50 border-green-500' :
-                            notification.type === 'verified' ? 'bg-purple-50 border-purple-500' :
-                            'bg-orange-50 border-orange-500'
-                          }`}
-                        >
-                          <p className="text-sm text-gray-700">{notification.text}</p>
-                          <p className="text-xs text-gray-500 mt-1">Just now</p>
-                        </motion.div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-
-              {/* Benefits List */}
-              <motion.div
-                initial={{ opacity: 0, x: 50 }}
-                whileInView={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.8 }}
-                viewport={{ once: true }}
-                className="space-y-6"
-              >
-                {[
-                  {
-                    icon: <Zap className="w-6 h-6 text-blue-500" />,
-                    title: "Instant Notifications",
-                    description: "Get real-time updates when providers respond to your tasks"
-                  },
-                  {
-                    icon: <Shield className="w-6 h-6 text-green-500" />,
-                    title: "Call Center Verification",
-                    description: "All providers are verified by our 24/7 call center team"
-                  },
-                  {
-                    icon: <MapPin className="w-6 h-6 text-purple-500" />,
-                    title: "Location Privacy",
-                    description: "Your address is only shared after provider verification"
-                  },
-                  {
-                    icon: <Clock className="w-6 h-6 text-orange-500" />,
-                    title: "Quick Matching",
-                    description: "Find providers within 6-10km of your location instantly"
-                  }
-                ].map((benefit, index) => (
-                  <motion.div
-                    key={index}
-                    initial={{ opacity: 0, y: 20 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5, delay: index * 0.1 }}
-                    viewport={{ once: true }}
-                    className="flex items-start space-x-4"
-                  >
-                    <div className="flex-shrink-0 w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
-                      {benefit.icon}
-                    </div>
-                    <div>
-                      <h4 className="font-semibold text-gray-900 mb-1">{benefit.title}</h4>
-                      <p className="text-gray-600">{benefit.description}</p>
-                    </div>
-                  </motion.div>
-                ))}
-              </motion.div>
-            </div>
-          </div>
-        </div>
-      </section>
 
       {/* CTA Section */}
       <section className="py-20 bg-gradient-to-r from-primary to-blue-700 text-white relative overflow-hidden">
@@ -970,24 +783,7 @@ export default function HomePage() {
         onSkip={handleOnboardingSkip}
       />
 
-      {/* Tour Button for testing/demo */}
-      {!onboardingOpen && (
-        <motion.div
-          initial={{ opacity: 0, scale: 0 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 1 }}
-          className="fixed bottom-6 right-6 z-40"
-        >
-          <Button
-            onClick={() => setOnboardingOpen(true)}
-            className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white shadow-lg hover:shadow-xl transition-all duration-300 rounded-full p-4"
-            size="lg"
-          >
-            <Sparkles className="w-5 h-5 mr-2" />
-            Take a Tour
-          </Button>
-        </motion.div>
-      )}
+
     </MainLayout>
   );
 }
