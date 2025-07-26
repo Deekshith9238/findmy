@@ -14,7 +14,7 @@ export const userRoles = {
 } as const;
 
 // User table for all user types
-export const users = pgTable("users", {
+export const users: any = pgTable("users", {
   id: serial("id").primaryKey(),
   username: text("username").notNull().unique(),
   email: text("email").notNull().unique(),
@@ -54,7 +54,7 @@ export const otpVerifications = pgTable("otp_verifications", {
 });
 
 // User relations
-export const usersRelations = relations(users, ({ many, one }) => ({
+export const usersRelations: any = relations(users, ({ many, one }) => ({
   providerProfile: one(serviceProviders, {
     fields: [users.id],
     references: [serviceProviders.userId],
@@ -353,7 +353,7 @@ export const tasks = pgTable("tasks", {
   categoryId: integer("category_id").notNull().references(() => serviceCategories.id),
   title: text("title").notNull(),
   description: text("description").notNull(),
-  location: text("location").notNull(),
+  location: text("location"),
   latitude: doublePrecision("latitude"),
   longitude: doublePrecision("longitude"),
   budget: doublePrecision("budget"),
@@ -613,6 +613,8 @@ export const insertTaskSchema = createInsertSchema(tasks).omit({
   id: true,
   createdAt: true,
   completedAt: true
+}).extend({
+  location: z.string().optional()
 });
 
 export const insertServiceRequestSchema = createInsertSchema(serviceRequests).omit({

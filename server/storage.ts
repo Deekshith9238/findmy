@@ -367,8 +367,11 @@ export class MemStorage implements IStorage {
       id, 
       createdAt, 
       completedAt: null,
-      status: task.status || "open", // ensure status is always defined
-      budget: task.budget !== undefined ? task.budget : null
+      status: task.status || "open",
+      budget: task.budget !== undefined ? task.budget : null,
+      latitude: task.latitude !== undefined ? task.latitude : null,
+      longitude: task.longitude !== undefined ? task.longitude : null,
+      location: task.location !== undefined ? task.location : null
     };
     this.tasks.set(id, newTask);
     return newTask;
