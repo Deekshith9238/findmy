@@ -10,7 +10,12 @@ import {
   notifications, type Notification, type InsertNotification,
   escrowPayments, type EscrowPayment, type InsertEscrowPayment,
   workCompletionPhotos, type WorkCompletionPhoto, type InsertWorkCompletionPhoto,
-  providerBankAccounts, type ProviderBankAccount, type InsertProviderBankAccount
+  providerBankAccounts, type ProviderBankAccount, type InsertProviderBankAccount,
+  // FieldNation-style entities
+  workOrders, type WorkOrder, type InsertWorkOrder,
+  jobBids, type JobBid, type InsertJobBid,
+  providerSkills, type ProviderSkill, type InsertProviderSkill,
+  providerEquipment, type ProviderEquipment, type InsertProviderEquipment
 } from "@shared/schema";
 import session from "express-session";
 import createMemoryStore from "memorystore";
@@ -101,6 +106,36 @@ export interface IStorage {
   getProviderBankAccount(providerId: number): Promise<ProviderBankAccount | undefined>;
   updateProviderBankAccount(id: number, account: Partial<ProviderBankAccount>): Promise<ProviderBankAccount | undefined>;
   
+  // FieldNation-style Work Order methods
+  createWorkOrder(workOrder: InsertWorkOrder): Promise<WorkOrder>;
+  getWorkOrder(id: number): Promise<WorkOrder | undefined>;
+  getWorkOrderWithDetails(id: number): Promise<any | undefined>;
+  getWorkOrdersByClient(clientId: number): Promise<WorkOrder[]>;
+  getWorkOrdersByProvider(providerId: number): Promise<WorkOrder[]>;
+  getAvailableWorkOrders(categoryId?: number): Promise<WorkOrder[]>;
+  getAvailableWorkOrdersByLocation(lat: number, lng: number, radius: number, categoryId?: number): Promise<WorkOrder[]>;
+  updateWorkOrder(id: number, workOrder: Partial<WorkOrder>): Promise<WorkOrder | undefined>;
+  
+  // Job Bidding methods
+  createJobBid(bid: InsertJobBid): Promise<JobBid>;
+  getJobBid(id: number): Promise<JobBid | undefined>;
+  getJobBidsByWorkOrder(workOrderId: number): Promise<any[]>;
+  getJobBidsByProvider(providerId: number): Promise<JobBid[]>;
+  updateJobBid(id: number, bid: Partial<JobBid>): Promise<JobBid | undefined>;
+  
+  // Provider Skills methods
+  createProviderSkill(skill: InsertProviderSkill): Promise<ProviderSkill>;
+  getProviderSkills(providerId: number): Promise<ProviderSkill[]>;
+  deleteProviderSkill(id: number): Promise<boolean>;
+  
+  // Provider Equipment methods
+  createProviderEquipment(equipment: InsertProviderEquipment): Promise<ProviderEquipment>;
+  getProviderEquipment(providerId: number): Promise<ProviderEquipment[]>;
+  deleteProviderEquipment(id: number): Promise<boolean>;
+  
+  // Enhanced location methods for FieldNation
+  getServiceProvidersByLocation(lat: number, lng: number, radius: number, categoryId?: number): Promise<any[]>;
+  
   // Session store
   sessionStore: session.Store;
 }
@@ -118,6 +153,11 @@ export class MemStorage implements IStorage {
   private escrowPayments: Map<number, EscrowPayment>;
   private workCompletionPhotos: Map<number, WorkCompletionPhoto>;
   private providerBankAccounts: Map<number, ProviderBankAccount>;
+  // FieldNation-style maps
+  private workOrders: Map<number, WorkOrder>;
+  private jobBids: Map<number, JobBid>;
+  private providerSkills: Map<number, ProviderSkill>;
+  private providerEquipment: Map<number, ProviderEquipment>;
   
   sessionStore: session.Store;
   currentId: { [key: string]: number };
@@ -135,6 +175,11 @@ export class MemStorage implements IStorage {
     this.escrowPayments = new Map();
     this.workCompletionPhotos = new Map();
     this.providerBankAccounts = new Map();
+    // FieldNation-style maps
+    this.workOrders = new Map();
+    this.jobBids = new Map();
+    this.providerSkills = new Map();
+    this.providerEquipment = new Map();
     
     this.currentId = {
       users: 1,
@@ -148,7 +193,12 @@ export class MemStorage implements IStorage {
       notifications: 1,
       escrowPayments: 1,
       workCompletionPhotos: 1,
-      providerBankAccounts: 1
+      providerBankAccounts: 1,
+      // FieldNation IDs
+      workOrders: 1,
+      jobBids: 1,
+      providerSkills: 1,
+      providerEquipment: 1
     };
     
     this.sessionStore = new MemoryStore({
@@ -945,6 +995,359 @@ export class DatabaseStorage implements IStorage {
       .where(eq(providerBankAccounts.id, id))
       .returning();
     return updatedAccount;
+  }
+
+  // ===============================
+  // FIELDNATION-STYLE WORK ORDERS
+  // ===============================
+
+  async createWorkOrder(workOrder: InsertWorkOrder): Promise<WorkOrder> {
+    const [newWorkOrder] = await db.insert(workOrders).values({
+      ...workOrder,
+      status: 'open',
+      createdAt: new Date()
+    }).returning();
+    return newWorkOrder;
+  }
+
+  async getWorkOrder(id: number): Promise<WorkOrder | undefined> {
+    const [workOrder] = await db.select().from(workOrders).where(eq(workOrders.id, id));
+    return workOrder;
+  }
+
+  async getWorkOrderWithDetails(id: number): Promise<any | undefined> {
+    const query = `
+      SELECT 
+        wo.*,
+        c.first_name as client_first_name,
+        c.last_name as client_last_name,
+        c.email as client_email,
+        sc.name as category_name,
+        sp.id as assigned_provider_id,
+        sp.user_id as assigned_provider_user_id,
+        pu.first_name as assigned_provider_first_name,
+        pu.last_name as assigned_provider_last_name,
+        json_agg(
+          CASE 
+            WHEN jb.id IS NOT NULL THEN 
+              json_build_object(
+                'id', jb.id,
+                'bidAmount', jb.bid_amount,
+                'proposedStartDate', jb.proposed_start_date,
+                'estimatedDuration', jb.estimated_duration,
+                'message', jb.message,
+                'status', jb.status,
+                'submittedAt', jb.submitted_at,
+                'provider', json_build_object(
+                  'id', bp.id,
+                  'userId', bp.user_id,
+                  'user', json_build_object(
+                    'firstName', bu.first_name,
+                    'lastName', bu.last_name,
+                    'email', bu.email
+                  )
+                )
+              )
+            ELSE NULL
+          END
+        ) FILTER (WHERE jb.id IS NOT NULL) as bids
+      FROM work_orders wo
+      LEFT JOIN users c ON wo.client_id = c.id
+      LEFT JOIN service_categories sc ON wo.category_id = sc.id
+      LEFT JOIN service_providers sp ON wo.assigned_provider_id = sp.id
+      LEFT JOIN users pu ON sp.user_id = pu.id
+      LEFT JOIN job_bids jb ON wo.id = jb.work_order_id
+      LEFT JOIN service_providers bp ON jb.provider_id = bp.id
+      LEFT JOIN users bu ON bp.user_id = bu.id
+      WHERE wo.id = $1
+      GROUP BY wo.id, c.id, sc.id, sp.id, pu.id
+    `;
+
+    const result = await pool.query(query, [id]);
+    if (!result.rows.length) return undefined;
+
+    const row = result.rows[0];
+    return {
+      id: row.id,
+      clientId: row.client_id,
+      categoryId: row.category_id,
+      assignedProviderId: row.assigned_provider_id,
+      title: row.title,
+      description: row.description,
+      jobType: row.job_type,
+      siteAddress: row.site_address,
+      siteCity: row.site_city,
+      siteState: row.site_state,
+      siteZip: row.site_zip,
+      latitude: row.latitude,
+      longitude: row.longitude,
+      preferredStartDate: row.preferred_start_date,
+      preferredEndDate: row.preferred_end_date,
+      isFlexibleSchedule: row.is_flexible_schedule,
+      estimatedDuration: row.estimated_duration,
+      budget: row.budget,
+      isBudgetFlexible: row.is_budget_flexible,
+      skillsRequired: row.skills_required,
+      toolsRequired: row.tools_required,
+      experienceLevel: row.experience_level,
+      siteContactName: row.site_contact_name,
+      siteContactPhone: row.site_contact_phone,
+      siteContactEmail: row.site_contact_email,
+      specialInstructions: row.special_instructions,
+      allowBidding: row.allow_bidding,
+      status: row.status,
+      createdAt: row.created_at,
+      actualStartTime: row.actual_start_time,
+      actualEndTime: row.actual_end_time,
+      completedAt: row.completed_at,
+      client: {
+        firstName: row.client_first_name,
+        lastName: row.client_last_name,
+        email: row.client_email
+      },
+      category: {
+        name: row.category_name
+      },
+      assignedProvider: row.assigned_provider_id ? {
+        id: row.assigned_provider_id,
+        userId: row.assigned_provider_user_id,
+        user: {
+          firstName: row.assigned_provider_first_name,
+          lastName: row.assigned_provider_last_name
+        }
+      } : undefined,
+      bids: row.bids || []
+    };
+  }
+
+  async getWorkOrdersByClient(clientId: number): Promise<WorkOrder[]> {
+    return db.select().from(workOrders)
+      .where(eq(workOrders.clientId, clientId))
+      .orderBy(desc(workOrders.createdAt));
+  }
+
+  async getWorkOrdersByProvider(providerId: number): Promise<WorkOrder[]> {
+    return db.select().from(workOrders)
+      .where(eq(workOrders.assignedProviderId, providerId))
+      .orderBy(desc(workOrders.createdAt));
+  }
+
+  async getAvailableWorkOrders(categoryId?: number): Promise<WorkOrder[]> {
+    const baseQuery = db.select().from(workOrders)
+      .where(eq(workOrders.status, 'open'));
+    
+    if (categoryId) {
+      return baseQuery.where(eq(workOrders.categoryId, categoryId))
+        .orderBy(desc(workOrders.createdAt));
+    }
+    
+    return baseQuery.orderBy(desc(workOrders.createdAt));
+  }
+
+  async getAvailableWorkOrdersByLocation(lat: number, lng: number, radius: number, categoryId?: number): Promise<WorkOrder[]> {
+    const earthRadius = 6371; // Earth radius in kilometers
+    
+    let query = `
+      SELECT wo.*, 
+        (${earthRadius} * acos(cos(radians($1)) * cos(radians(wo.latitude)) * 
+        cos(radians(wo.longitude) - radians($2)) + sin(radians($1)) * 
+        sin(radians(wo.latitude)))) AS distance
+      FROM work_orders wo
+      WHERE wo.status = 'open'
+        AND wo.latitude IS NOT NULL 
+        AND wo.longitude IS NOT NULL
+        AND (${earthRadius} * acos(cos(radians($1)) * cos(radians(wo.latitude)) * 
+        cos(radians(wo.longitude) - radians($2)) + sin(radians($1)) * 
+        sin(radians(wo.latitude)))) <= $3
+    `;
+    
+    const params = [lat, lng, radius];
+    
+    if (categoryId) {
+      query += ` AND wo.category_id = $4`;
+      params.push(categoryId);
+    }
+    
+    query += ` ORDER BY distance ASC`;
+    
+    const result = await pool.query(query, params);
+    return result.rows;
+  }
+
+  async updateWorkOrder(id: number, workOrder: Partial<WorkOrder>): Promise<WorkOrder | undefined> {
+    const [updatedWorkOrder] = await db.update(workOrders)
+      .set(workOrder)
+      .where(eq(workOrders.id, id))
+      .returning();
+    return updatedWorkOrder;
+  }
+
+  // ===============================
+  // JOB BIDDING SYSTEM
+  // ===============================
+
+  async createJobBid(bid: InsertJobBid): Promise<JobBid> {
+    const [newBid] = await db.insert(jobBids).values({
+      ...bid,
+      status: 'pending',
+      submittedAt: new Date()
+    }).returning();
+    return newBid;
+  }
+
+  async getJobBid(id: number): Promise<JobBid | undefined> {
+    const [bid] = await db.select().from(jobBids).where(eq(jobBids.id, id));
+    return bid;
+  }
+
+  async getJobBidsByWorkOrder(workOrderId: number): Promise<any[]> {
+    const query = `
+      SELECT 
+        jb.*,
+        sp.id as provider_id,
+        sp.user_id as provider_user_id,
+        sp.hourly_rate,
+        sp.bio,
+        u.first_name,
+        u.last_name,
+        u.email,
+        u.profile_image_url
+      FROM job_bids jb
+      JOIN service_providers sp ON jb.provider_id = sp.id
+      JOIN users u ON sp.user_id = u.id
+      WHERE jb.work_order_id = $1
+      ORDER BY jb.submitted_at DESC
+    `;
+
+    const result = await pool.query(query, [workOrderId]);
+    return result.rows.map(row => ({
+      id: row.id,
+      workOrderId: row.work_order_id,
+      providerId: row.provider_id,
+      bidAmount: row.bid_amount,
+      proposedStartDate: row.proposed_start_date,
+      estimatedDuration: row.estimated_duration,
+      message: row.message,
+      status: row.status,
+      submittedAt: row.submitted_at,
+      provider: {
+        id: row.provider_id,
+        userId: row.provider_user_id,
+        hourlyRate: row.hourly_rate,
+        bio: row.bio,
+        user: {
+          firstName: row.first_name,
+          lastName: row.last_name,
+          email: row.email,
+          profileImageUrl: row.profile_image_url
+        }
+      }
+    }));
+  }
+
+  async getJobBidsByProvider(providerId: number): Promise<JobBid[]> {
+    return db.select().from(jobBids)
+      .where(eq(jobBids.providerId, providerId))
+      .orderBy(desc(jobBids.submittedAt));
+  }
+
+  async updateJobBid(id: number, bid: Partial<JobBid>): Promise<JobBid | undefined> {
+    const [updatedBid] = await db.update(jobBids)
+      .set(bid)
+      .where(eq(jobBids.id, id))
+      .returning();
+    return updatedBid;
+  }
+
+  // ===============================
+  // PROVIDER SKILLS & EQUIPMENT
+  // ===============================
+
+  async createProviderSkill(skill: InsertProviderSkill): Promise<ProviderSkill> {
+    const [newSkill] = await db.insert(providerSkills).values(skill).returning();
+    return newSkill;
+  }
+
+  async getProviderSkills(providerId: number): Promise<ProviderSkill[]> {
+    return db.select().from(providerSkills)
+      .where(eq(providerSkills.providerId, providerId))
+      .orderBy(providerSkills.skillName);
+  }
+
+  async deleteProviderSkill(id: number): Promise<boolean> {
+    const result = await db.delete(providerSkills).where(eq(providerSkills.id, id));
+    return result.rowCount > 0;
+  }
+
+  async createProviderEquipment(equipment: InsertProviderEquipment): Promise<ProviderEquipment> {
+    const [newEquipment] = await db.insert(providerEquipment).values(equipment).returning();
+    return newEquipment;
+  }
+
+  async getProviderEquipment(providerId: number): Promise<ProviderEquipment[]> {
+    return db.select().from(providerEquipment)
+      .where(eq(providerEquipment.providerId, providerId))
+      .orderBy(providerEquipment.equipmentName);
+  }
+
+  async deleteProviderEquipment(id: number): Promise<boolean> {
+    const result = await db.delete(providerEquipment).where(eq(providerEquipment.id, id));
+    return result.rowCount > 0;
+  }
+
+  // Enhanced location methods for FieldNation
+  async getServiceProvidersByLocation(lat: number, lng: number, radius: number, categoryId?: number): Promise<any[]> {
+    const earthRadius = 6371; // Earth radius in kilometers
+    
+    let query = `
+      SELECT sp.*, u.*, sc.name as category_name,
+        (${earthRadius} * acos(cos(radians($1)) * cos(radians(u.latitude)) * 
+        cos(radians(u.longitude) - radians($2)) + sin(radians($1)) * 
+        sin(radians(u.latitude)))) AS distance
+      FROM service_providers sp
+      JOIN users u ON sp.user_id = u.id
+      JOIN service_categories sc ON sp.category_id = sc.id
+      WHERE sp.is_verified = true
+        AND sp.has_approved_banking = true
+        AND u.latitude IS NOT NULL 
+        AND u.longitude IS NOT NULL
+        AND (${earthRadius} * acos(cos(radians($1)) * cos(radians(u.latitude)) * 
+        cos(radians(u.longitude) - radians($2)) + sin(radians($1)) * 
+        sin(radians(u.latitude)))) <= $3
+    `;
+    
+    const params = [lat, lng, radius];
+    
+    if (categoryId) {
+      query += ` AND sp.category_id = $4`;
+      params.push(categoryId);
+    }
+    
+    query += ` ORDER BY distance ASC`;
+    
+    const result = await pool.query(query, params);
+    return result.rows.map(row => ({
+      id: row.id,
+      userId: row.user_id,
+      categoryId: row.category_id,
+      hourlyRate: row.hourly_rate,
+      bio: row.bio,
+      isVerified: row.is_verified,
+      hasApprovedBanking: row.has_approved_banking,
+      distance: row.distance,
+      user: {
+        id: row.user_id,
+        firstName: row.first_name,
+        lastName: row.last_name,
+        email: row.email,
+        latitude: row.latitude,
+        longitude: row.longitude,
+        profileImageUrl: row.profile_image_url
+      },
+      category: {
+        name: row.category_name
+      }
+    }));
   }
 }
 

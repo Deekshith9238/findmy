@@ -188,6 +188,11 @@ export const serviceProvidersRelations = relations(serviceProviders, ({ one, man
   documents: many(serviceProviderDocuments),
   serviceRequests: many(serviceRequests),
   reviews: many(reviews),
+  // FieldNation-style relations
+  skills: many(providerSkills),
+  equipment: many(providerEquipment),
+  bids: many(jobBids),
+  assignedWorkOrders: many(workOrders),
 }));
 
 // Service provider documents relations
@@ -247,7 +252,88 @@ export const providerBankAccountsRelations = relations(providerBankAccounts, ({ 
 
 
 
-// Tasks or job postings
+// Job types following FieldNation model
+export const jobTypes = {
+  INSTALLATION: "installation",
+  REPAIR: "repair", 
+  MAINTENANCE: "maintenance",
+  SETUP: "setup",
+  TROUBLESHOOTING: "troubleshooting",
+  INSPECTION: "inspection",
+  CONSULTATION: "consultation"
+} as const;
+
+// Job status following FieldNation workflow
+export const jobStatus = {
+  OPEN: "open",
+  BIDDING: "bidding", 
+  ASSIGNED: "assigned",
+  IN_PROGRESS: "in_progress",
+  AWAITING_APPROVAL: "awaiting_approval",
+  COMPLETED: "completed",
+  CANCELLED: "cancelled"
+} as const;
+
+// Work Orders (enhanced version of tasks following FieldNation model)
+export const workOrders = pgTable("work_orders", {
+  id: serial("id").primaryKey(),
+  clientId: integer("client_id").notNull().references(() => users.id),
+  categoryId: integer("category_id").notNull().references(() => serviceCategories.id),
+  assignedProviderId: integer("assigned_provider_id").references(() => serviceProviders.id),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  jobType: text("job_type").notNull(),
+  
+  // Location details
+  siteAddress: text("site_address").notNull(),
+  siteCity: text("site_city").notNull(),
+  siteState: text("site_state").notNull(),
+  siteZip: text("site_zip").notNull(),
+  latitude: doublePrecision("latitude"),
+  longitude: doublePrecision("longitude"),
+  
+  // Scheduling
+  preferredStartDate: timestamp("preferred_start_date"),
+  preferredEndDate: timestamp("preferred_end_date"),
+  isFlexibleSchedule: boolean("is_flexible_schedule").default(true),
+  estimatedDuration: integer("estimated_duration_hours"),
+  
+  // Budget and payment
+  budget: doublePrecision("budget"),
+  isBudgetFlexible: boolean("is_budget_flexible").default(false),
+  
+  // Requirements
+  skillsRequired: text("skills_required"), // JSON array of required skills
+  toolsRequired: text("tools_required"), // JSON array of required tools
+  experienceLevel: text("experience_level"), // "entry", "intermediate", "expert"
+  
+  // Contact information
+  siteContactName: text("site_contact_name"),
+  siteContactPhone: text("site_contact_phone"),
+  siteContactEmail: text("site_contact_email"),
+  
+  // Work order specifics
+  workInstructions: text("work_instructions"),
+  safetyRequirements: text("safety_requirements"),
+  accessInstructions: text("access_instructions"),
+  
+  status: text("status").notNull().default(jobStatus.OPEN),
+  
+  // Bidding settings
+  allowBidding: boolean("allow_bidding").default(true),
+  biddingDeadline: timestamp("bidding_deadline"),
+  maxProviders: integer("max_providers").default(5),
+  
+  // Completion tracking
+  actualStartTime: timestamp("actual_start_time"),
+  actualEndTime: timestamp("actual_end_time"),
+  completedAt: timestamp("completed_at"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// For backward compatibility, keep tasks table but mark as deprecated
 export const tasks = pgTable("tasks", {
   id: serial("id").primaryKey(),
   clientId: integer("client_id").notNull().references(() => users.id),
@@ -333,6 +419,100 @@ export const notifications = pgTable("notifications", {
   isRead: boolean("is_read").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow(),
 });
+
+// Job Bids (FieldNation-style bidding system)
+export const jobBids = pgTable("job_bids", {
+  id: serial("id").primaryKey(),
+  workOrderId: integer("work_order_id").notNull().references(() => workOrders.id),
+  providerId: integer("provider_id").notNull().references(() => serviceProviders.id),
+  
+  // Bid details
+  bidAmount: doublePrecision("bid_amount").notNull(),
+  proposedStartDate: timestamp("proposed_start_date"),
+  estimatedCompletionTime: integer("estimated_completion_hours"),
+  
+  // Provider's proposal
+  coverLetter: text("cover_letter"), // Why they're the right fit
+  additionalServices: text("additional_services"), // JSON array of extra services offered
+  
+  // Bid status
+  status: text("status").notNull().default("pending"), // pending, accepted, rejected, withdrawn
+  
+  // Auto-matching score (based on location, skills, ratings, etc.)
+  matchScore: integer("match_score").default(0),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Provider Skills (for better job matching)
+export const providerSkills = pgTable("provider_skills", {
+  id: serial("id").primaryKey(),
+  providerId: integer("provider_id").notNull().references(() => serviceProviders.id),
+  skillName: text("skill_name").notNull(),
+  experienceLevel: text("experience_level").notNull(), // "beginner", "intermediate", "expert"
+  yearsOfExperience: integer("years_of_experience").default(0),
+  isCertified: boolean("is_certified").default(false),
+  certificationName: text("certification_name"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Provider Equipment/Tools
+export const providerEquipment = pgTable("provider_equipment", {
+  id: serial("id").primaryKey(),
+  providerId: integer("provider_id").notNull().references(() => serviceProviders.id),
+  equipmentName: text("equipment_name").notNull(),
+  equipmentType: text("equipment_type"), // "vehicle", "tool", "diagnostic_equipment", etc.
+  hasOwn: boolean("has_own").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Work Order Relations
+export const workOrdersRelations = relations(workOrders, ({ one, many }) => ({
+  client: one(users, {
+    fields: [workOrders.clientId],
+    references: [users.id],
+    relationName: 'client',
+  }),
+  category: one(serviceCategories, {
+    fields: [workOrders.categoryId],
+    references: [serviceCategories.id],
+  }),
+  assignedProvider: one(serviceProviders, {
+    fields: [workOrders.assignedProviderId],
+    references: [serviceProviders.id],
+  }),
+  bids: many(jobBids),
+  completionPhotos: many(workCompletionPhotos),
+}));
+
+// Job Bids Relations
+export const jobBidsRelations = relations(jobBids, ({ one }) => ({
+  workOrder: one(workOrders, {
+    fields: [jobBids.workOrderId],
+    references: [workOrders.id],
+  }),
+  provider: one(serviceProviders, {
+    fields: [jobBids.providerId],
+    references: [serviceProviders.id],
+  }),
+}));
+
+// Provider Skills Relations
+export const providerSkillsRelations = relations(providerSkills, ({ one }) => ({
+  provider: one(serviceProviders, {
+    fields: [providerSkills.providerId],
+    references: [serviceProviders.id],
+  }),
+}));
+
+// Provider Equipment Relations
+export const providerEquipmentRelations = relations(providerEquipment, ({ one }) => ({
+  provider: one(serviceProviders, {
+    fields: [providerEquipment.providerId],
+    references: [serviceProviders.id],
+  }),
+}));
 
 // Service requests relations
 export const serviceRequestsRelations = relations(serviceRequests, ({ one, many }) => ({
@@ -447,6 +627,33 @@ export const insertServiceProviderDocumentSchema = createInsertSchema(servicePro
   verifiedAt: true
 });
 
+// FieldNation-style schemas
+export const insertWorkOrderSchema = createInsertSchema(workOrders).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  completedAt: true,
+  actualStartTime: true,
+  actualEndTime: true
+});
+
+export const insertJobBidSchema = createInsertSchema(jobBids).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  matchScore: true
+});
+
+export const insertProviderSkillSchema = createInsertSchema(providerSkills).omit({
+  id: true,
+  createdAt: true
+});
+
+export const insertProviderEquipmentSchema = createInsertSchema(providerEquipment).omit({
+  id: true,
+  createdAt: true
+});
+
 export const insertCallCenterAssignmentSchema = createInsertSchema(callCenterAssignments).omit({
   id: true,
   assignedAt: true,
@@ -538,4 +745,42 @@ export type ServiceProviderWithDocuments = ServiceProvider & {
   user: User;
   category: ServiceCategory;
   documents: ServiceProviderDocument[];
+};
+
+// FieldNation-style types
+export type InsertWorkOrder = z.infer<typeof insertWorkOrderSchema>;
+export type WorkOrder = typeof workOrders.$inferSelect;
+
+export type InsertJobBid = z.infer<typeof insertJobBidSchema>;
+export type JobBid = typeof jobBids.$inferSelect;
+
+export type InsertProviderSkill = z.infer<typeof insertProviderSkillSchema>;
+export type ProviderSkill = typeof providerSkills.$inferSelect;
+
+export type InsertProviderEquipment = z.infer<typeof insertProviderEquipmentSchema>;
+export type ProviderEquipment = typeof providerEquipment.$inferSelect;
+
+// Job type and status types
+export type JobType = typeof jobTypes[keyof typeof jobTypes];
+export type JobStatus = typeof jobStatus[keyof typeof jobStatus];
+
+// Extended work order with related data
+export type WorkOrderWithDetails = WorkOrder & {
+  client: User;
+  category: ServiceCategory;
+  assignedProvider?: ServiceProvider & { user: User };
+  bids: (JobBid & { provider: ServiceProvider & { user: User } })[];
+};
+
+// Provider with skills and equipment
+export type ServiceProviderWithSkills = ServiceProvider & {
+  user: User;
+  category: ServiceCategory;
+  skills: ProviderSkill[];
+  equipment: ProviderEquipment[];
+};
+
+// Job bid with provider details
+export type JobBidWithProvider = JobBid & {
+  provider: ServiceProvider & { user: User };
 };

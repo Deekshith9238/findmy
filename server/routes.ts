@@ -18,8 +18,14 @@ import {
   insertEscrowPaymentSchema,
   insertWorkCompletionPhotoSchema,
   insertProviderBankAccountSchema,
+  insertWorkOrderSchema,
+  insertJobBidSchema,
+  insertProviderSkillSchema,
+  insertProviderEquipmentSchema,
   paymentStatuses,
-  userRoles
+  userRoles,
+  jobTypes,
+  jobStatus
 } from "@shared/schema";
 import Stripe from "stripe";
 import type { Request, Response, NextFunction } from "express";
@@ -1786,6 +1792,443 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Bank account fetch error:', error);
       res.status(500).json({ message: "Failed to fetch bank account" });
+    }
+  });
+
+  // ===============================
+  // FIELDNATION-STYLE WORK ORDERS
+  // ===============================
+
+  // Create a work order (buyers post jobs)
+  app.post("/api/work-orders", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+
+    try {
+      const workOrderData = insertWorkOrderSchema.parse({
+        ...req.body,
+        clientId: req.user!.id
+      });
+
+      const workOrder = await storage.createWorkOrder(workOrderData);
+      
+      // Auto-notify providers within reasonable distance
+      if (workOrder.latitude && workOrder.longitude) {
+        const nearbyProviders = await storage.getServiceProvidersByLocation(
+          workOrder.latitude,
+          workOrder.longitude,
+          25, // 25km radius
+          workOrder.categoryId
+        );
+
+        // Send notifications to nearby providers
+        for (const provider of nearbyProviders) {
+          const distance = calculateDistance(
+            workOrder.latitude,
+            workOrder.longitude,
+            provider.user.latitude || 0,
+            provider.user.longitude || 0
+          );
+
+          const notification = await storage.createNotification({
+            userId: provider.userId,
+            type: 'new_work_order',
+            title: 'New Work Order Available',
+            message: `${workOrder.title} - ${distance.toFixed(1)}km away - Budget: $${workOrder.budget}`,
+            data: JSON.stringify({ workOrderId: workOrder.id, distance })
+          });
+          
+          await sendNotificationToUser(provider.userId, notification);
+        }
+      }
+
+      res.status(201).json(workOrder);
+    } catch (error) {
+      console.error('Work order creation error:', error);
+      res.status(400).json({ message: "Failed to create work order" });
+    }
+  });
+
+  // Get work orders for buyers
+  app.get("/api/work-orders/client", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+
+    try {
+      const workOrders = await storage.getWorkOrdersByClient(req.user!.id);
+      res.json(workOrders);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch work orders" });
+    }
+  });
+
+  // Get available work orders for providers
+  app.get("/api/work-orders/available", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+
+    try {
+      const provider = await storage.getServiceProviderByUserId(req.user!.id);
+      if (!provider) {
+        return res.status(404).json({ message: "Provider profile not found" });
+      }
+
+      const { lat, lng, radius = 25, category } = req.query;
+      const userLat = lat ? parseFloat(lat as string) : provider.user?.latitude;
+      const userLng = lng ? parseFloat(lng as string) : provider.user?.longitude;
+
+      let workOrders;
+      if (userLat && userLng) {
+        workOrders = await storage.getAvailableWorkOrdersByLocation(
+          userLat,
+          userLng,
+          parseInt(radius as string),
+          category ? parseInt(category as string) : undefined
+        );
+      } else {
+        workOrders = await storage.getAvailableWorkOrders(
+          category ? parseInt(category as string) : undefined
+        );
+      }
+
+      res.json(workOrders);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch available work orders" });
+    }
+  });
+
+  // Get specific work order with bids
+  app.get("/api/work-orders/:id", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+
+    try {
+      const workOrderId = parseInt(req.params.id);
+      const workOrder = await storage.getWorkOrderWithDetails(workOrderId);
+      
+      if (!workOrder) {
+        return res.status(404).json({ message: "Work order not found" });
+      }
+
+      // Check if user has access to view this work order
+      const provider = await storage.getServiceProviderByUserId(req.user!.id);
+      const isOwner = workOrder.clientId === req.user!.id;
+      const isProvider = provider && (
+        workOrder.assignedProviderId === provider.id ||
+        workOrder.bids.some(bid => bid.providerId === provider.id)
+      );
+
+      if (!isOwner && !isProvider && !['admin', 'call_center'].includes(req.user!.role)) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      res.json(workOrder);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch work order" });
+    }
+  });
+
+  // ===============================
+  // JOB BIDDING SYSTEM
+  // ===============================
+
+  // Submit a bid on a work order
+  app.post("/api/work-orders/:id/bids", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+
+    try {
+      const workOrderId = parseInt(req.params.id);
+      const provider = await storage.getServiceProviderByUserId(req.user!.id);
+      
+      if (!provider) {
+        return res.status(404).json({ message: "Provider profile not found" });
+      }
+
+      const workOrder = await storage.getWorkOrder(workOrderId);
+      if (!workOrder) {
+        return res.status(404).json({ message: "Work order not found" });
+      }
+
+      if (!workOrder.allowBidding || workOrder.status !== 'open') {
+        return res.status(400).json({ message: "Bidding not allowed on this work order" });
+      }
+
+      const bidData = insertJobBidSchema.parse({
+        ...req.body,
+        workOrderId,
+        providerId: provider.id
+      });
+
+      const bid = await storage.createJobBid(bidData);
+
+      // Notify client about new bid
+      const notification = await storage.createNotification({
+        userId: workOrder.clientId,
+        type: 'new_bid',
+        title: 'New Bid Received',
+        message: `${provider.user.firstName} submitted a bid of $${bid.bidAmount} for "${workOrder.title}"`,
+        data: JSON.stringify({ workOrderId, bidId: bid.id, bidAmount: bid.bidAmount })
+      });
+      
+      await sendNotificationToUser(workOrder.clientId, notification);
+
+      res.status(201).json(bid);
+    } catch (error) {
+      console.error('Bid creation error:', error);
+      res.status(400).json({ message: "Failed to submit bid" });
+    }
+  });
+
+  // Get bids for a work order (client view)
+  app.get("/api/work-orders/:id/bids", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+
+    try {
+      const workOrderId = parseInt(req.params.id);
+      const workOrder = await storage.getWorkOrder(workOrderId);
+      
+      if (!workOrder) {
+        return res.status(404).json({ message: "Work order not found" });
+      }
+
+      // Only work order owner can view all bids
+      if (workOrder.clientId !== req.user!.id && !['admin'].includes(req.user!.role)) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      const bids = await storage.getJobBidsByWorkOrder(workOrderId);
+      res.json(bids);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch bids" });
+    }
+  });
+
+  // Accept a bid (assign work order to provider)
+  app.post("/api/work-orders/:workOrderId/bids/:bidId/accept", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+
+    try {
+      const workOrderId = parseInt(req.params.workOrderId);
+      const bidId = parseInt(req.params.bidId);
+
+      const workOrder = await storage.getWorkOrder(workOrderId);
+      if (!workOrder) {
+        return res.status(404).json({ message: "Work order not found" });
+      }
+
+      if (workOrder.clientId !== req.user!.id) {
+        return res.status(403).json({ message: "Only work order owner can accept bids" });
+      }
+
+      const bid = await storage.getJobBid(bidId);
+      if (!bid || bid.workOrderId !== workOrderId) {
+        return res.status(404).json({ message: "Bid not found" });
+      }
+
+      // Update work order and bid status
+      await storage.updateWorkOrder(workOrderId, {
+        assignedProviderId: bid.providerId,
+        status: 'assigned',
+        budget: bid.bidAmount
+      });
+
+      await storage.updateJobBid(bidId, {
+        status: 'accepted'
+      });
+
+      // Reject other bids
+      const otherBids = await storage.getJobBidsByWorkOrder(workOrderId);
+      for (const otherBid of otherBids) {
+        if (otherBid.id !== bidId && otherBid.status === 'pending') {
+          await storage.updateJobBid(otherBid.id, { status: 'rejected' });
+          
+          // Notify rejected providers
+          const notification = await storage.createNotification({
+            userId: otherBid.provider.userId,
+            type: 'bid_rejected',
+            title: 'Bid Not Selected',
+            message: `Your bid for "${workOrder.title}" was not selected`,
+            data: JSON.stringify({ workOrderId, bidId: otherBid.id })
+          });
+          
+          await sendNotificationToUser(otherBid.provider.userId, notification);
+        }
+      }
+
+      // Notify winning provider
+      const notification = await storage.createNotification({
+        userId: bid.provider.userId,
+        type: 'bid_accepted',
+        title: 'Congratulations! Bid Accepted',
+        message: `Your bid of $${bid.bidAmount} for "${workOrder.title}" has been accepted`,
+        data: JSON.stringify({ workOrderId, bidId })
+      });
+      
+      await sendNotificationToUser(bid.provider.userId, notification);
+
+      res.json({ message: "Bid accepted successfully" });
+    } catch (error) {
+      console.error('Bid acceptance error:', error);
+      res.status(500).json({ message: "Failed to accept bid" });
+    }
+  });
+
+  // ===============================
+  // PROVIDER SKILLS & EQUIPMENT
+  // ===============================
+
+  // Add provider skill
+  app.post("/api/provider/skills", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+
+    try {
+      const provider = await storage.getServiceProviderByUserId(req.user!.id);
+      if (!provider) {
+        return res.status(404).json({ message: "Provider profile not found" });
+      }
+
+      const skillData = insertProviderSkillSchema.parse({
+        ...req.body,
+        providerId: provider.id
+      });
+
+      const skill = await storage.createProviderSkill(skillData);
+      res.status(201).json(skill);
+    } catch (error) {
+      res.status(400).json({ message: "Failed to add skill" });
+    }
+  });
+
+  // Get provider skills
+  app.get("/api/provider/skills/:providerId", async (req, res) => {
+    try {
+      const providerId = parseInt(req.params.providerId);
+      const skills = await storage.getProviderSkills(providerId);
+      res.json(skills);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch skills" });
+    }
+  });
+
+  // Add provider equipment
+  app.post("/api/provider/equipment", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+
+    try {
+      const provider = await storage.getServiceProviderByUserId(req.user!.id);
+      if (!provider) {
+        return res.status(404).json({ message: "Provider profile not found" });
+      }
+
+      const equipmentData = insertProviderEquipmentSchema.parse({
+        ...req.body,
+        providerId: provider.id
+      });
+
+      const equipment = await storage.createProviderEquipment(equipmentData);
+      res.status(201).json(equipment);
+    } catch (error) {
+      res.status(400).json({ message: "Failed to add equipment" });
+    }
+  });
+
+  // Get provider equipment
+  app.get("/api/provider/equipment/:providerId", async (req, res) => {
+    try {
+      const providerId = parseInt(req.params.providerId);
+      const equipment = await storage.getProviderEquipment(providerId);
+      res.json(equipment);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch equipment" });
+    }
+  });
+
+  // Get provider's active work orders
+  app.get("/api/provider/work-orders", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+
+    try {
+      const provider = await storage.getServiceProviderByUserId(req.user!.id);
+      if (!provider) {
+        return res.status(404).json({ message: "Provider profile not found" });
+      }
+
+      const workOrders = await storage.getWorkOrdersByProvider(provider.id);
+      res.json(workOrders);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch work orders" });
+    }
+  });
+
+  // Update work order status (start, complete, etc.)
+  app.patch("/api/work-orders/:id/status", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+
+    try {
+      const workOrderId = parseInt(req.params.id);
+      const { status } = req.body;
+
+      const workOrder = await storage.getWorkOrder(workOrderId);
+      if (!workOrder) {
+        return res.status(404).json({ message: "Work order not found" });
+      }
+
+      const provider = await storage.getServiceProviderByUserId(req.user!.id);
+      const isProvider = provider && workOrder.assignedProviderId === provider.id;
+      const isClient = workOrder.clientId === req.user!.id;
+
+      if (!isProvider && !isClient && !['admin'].includes(req.user!.role)) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      const updateData: any = { status };
+
+      // Auto-set timestamps based on status
+      if (status === 'in_progress') {
+        updateData.actualStartTime = new Date();
+      } else if (status === 'completed') {
+        updateData.actualEndTime = new Date();
+        updateData.completedAt = new Date();
+      }
+
+      await storage.updateWorkOrder(workOrderId, updateData);
+
+      // Notify relevant parties
+      const targetUserId = isProvider ? workOrder.clientId : workOrder.assignedProviderId;
+      if (targetUserId) {
+        const notification = await storage.createNotification({
+          userId: targetUserId,
+          type: 'work_order_status_update',
+          title: 'Work Order Update',
+          message: `Work order "${workOrder.title}" status changed to ${status}`,
+          data: JSON.stringify({ workOrderId, status })
+        });
+        
+        await sendNotificationToUser(targetUserId, notification);
+      }
+
+      res.json({ message: "Status updated successfully" });
+    } catch (error) {
+      console.error('Status update error:', error);
+      res.status(500).json({ message: "Failed to update status" });
     }
   });
 
