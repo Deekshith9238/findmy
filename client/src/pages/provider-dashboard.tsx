@@ -52,15 +52,15 @@ export default function ProviderDashboard() {
     enabled: !!user,
   });
 
-  // Fetch all available tasks
-  const { data: availableTasks, isLoading: tasksLoading } = useQuery<any[]>({
-    queryKey: ["/api/tasks"],
-    enabled: !!user,
+  // Fetch available work orders (FieldNation-style)
+  const { data: availableWorkOrders, isLoading: workOrdersLoading } = useQuery<any[]>({
+    queryKey: ["/api/work-orders/available"],
+    enabled: !!user && isFullyVerified,
   });
 
-  // Fetch service requests related to this provider
-  const { data: serviceRequests, isLoading: requestsLoading } = useQuery<any[]>({
-    queryKey: ["/api/service-requests/provider"],
+  // Fetch assigned work orders for provider
+  const { data: assignedWorkOrders, isLoading: assignedLoading } = useQuery<any[]>({
+    queryKey: ["/api/provider/work-orders"],
     enabled: !!user && !!providerProfile,
   });
 
@@ -83,12 +83,12 @@ export default function ProviderDashboard() {
   );
   const isFullyVerified = hasApprovedIdentity && hasApprovedBankingDetails && hasApprovedLicense;
 
-  // Filter tasks that match the provider's category (only show to verified providers)
-  const filteredTasks = availableTasks?.filter(
-    (task) => 
-      task.category.id === providerProfile?.category.id && 
-      task.status === "open" &&
-      task.client.id !== user?.id
+  // Filter work orders that match the provider's category (only show to verified providers)
+  const filteredWorkOrders = availableWorkOrders?.filter(
+    (workOrder) => 
+      workOrder.category.id === providerProfile?.category.id && 
+      workOrder.status === "open" &&
+      workOrder.client.id !== user?.id
   );
 
   // Mutation for creating a service request
@@ -303,7 +303,7 @@ export default function ProviderDashboard() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-medium text-gray-600">Available Jobs</p>
-                    <p className="text-3xl font-bold text-gray-900">{filteredTasks?.length || 0}</p>
+                    <p className="text-3xl font-bold text-gray-900">{filteredWorkOrders?.length || 0}</p>
                     <p className="text-sm text-blue-600 mt-1">In your area</p>
                   </div>
                   <div className="h-12 w-12 bg-orange-100 rounded-lg flex items-center justify-center">
@@ -327,7 +327,7 @@ export default function ProviderDashboard() {
               >
                 <div className="flex items-center gap-2">
                   <FileText className="h-5 w-5" />
-                  Available Work Orders ({filteredTasks?.length || 0})
+                  Available Work Orders ({filteredWorkOrders?.length || 0})
                 </div>
               </button>
               <button
@@ -340,7 +340,7 @@ export default function ProviderDashboard() {
               >
                 <div className="flex items-center gap-2">
                   <Briefcase className="h-5 w-5" />
-                  My Assignments ({serviceRequests?.length || 0})
+                  My Assignments ({assignedWorkOrders?.length || 0})
                 </div>
               </button>
               <button

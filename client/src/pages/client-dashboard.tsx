@@ -19,15 +19,15 @@ export default function ClientDashboard() {
   const [activeTab, setActiveTab] = useState("tasks");
   const [createTaskDialogOpen, setCreateTaskDialogOpen] = useState(false);
 
-  // Fetch client tasks
-  const { data: tasks, isLoading: tasksLoading } = useQuery<any[]>({
-    queryKey: ["/api/tasks/client"],
+  // Fetch client work orders (FieldNation-style)
+  const { data: workOrders, isLoading: workOrdersLoading } = useQuery<any[]>({
+    queryKey: ["/api/work-orders/client"],
     enabled: !!user,
   });
 
-  // Fetch client service requests
-  const { data: serviceRequests, isLoading: requestsLoading } = useQuery<any[]>({
-    queryKey: ["/api/service-requests/client"],
+  // Fetch work order bids for client
+  const { data: workOrderBids, isLoading: bidsLoading } = useQuery<any[]>({
+    queryKey: ["/api/work-orders/client/bids"],
     enabled: !!user,
   });
 
@@ -122,7 +122,7 @@ export default function ClientDashboard() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-medium text-gray-600">Active Work Orders</p>
-                    <p className="text-3xl font-bold text-gray-900">{tasks?.filter(t => t.status === 'open' || t.status === 'in-progress').length || 0}</p>
+                    <p className="text-3xl font-bold text-gray-900">{workOrders?.filter(wo => wo.status === 'open' || wo.status === 'in_progress').length || 0}</p>
                     <p className="text-sm text-blue-600 mt-1">In progress</p>
                   </div>
                   <div className="h-12 w-12 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -137,7 +137,7 @@ export default function ClientDashboard() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-medium text-gray-600">Completed Jobs</p>
-                    <p className="text-3xl font-bold text-gray-900">{tasks?.filter(t => t.status === 'completed').length || 0}</p>
+                    <p className="text-3xl font-bold text-gray-900">{workOrders?.filter(wo => wo.status === 'completed').length || 0}</p>
                     <p className="text-sm text-green-600 mt-1">This month</p>
                   </div>
                   <div className="h-12 w-12 bg-green-100 rounded-lg flex items-center justify-center">
@@ -167,7 +167,7 @@ export default function ClientDashboard() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-medium text-gray-600">Pending Requests</p>
-                    <p className="text-3xl font-bold text-gray-900">{serviceRequests?.filter(r => r.status === 'pending').length || 0}</p>
+                    <p className="text-3xl font-bold text-gray-900">{workOrderBids?.filter(b => b.status === 'pending').length || 0}</p>
                     <p className="text-sm text-orange-600 mt-1">Need attention</p>
                   </div>
                   <div className="h-12 w-12 bg-orange-100 rounded-lg flex items-center justify-center">
@@ -191,7 +191,7 @@ export default function ClientDashboard() {
               >
                 <div className="flex items-center gap-2">
                   <FileText className="h-5 w-5" />
-                  Work Orders ({tasks?.length || 0})
+                  Work Orders ({workOrders?.length || 0})
                 </div>
               </button>
               <button
@@ -204,7 +204,7 @@ export default function ClientDashboard() {
               >
                 <div className="flex items-center gap-2">
                   <Clock className="h-5 w-5" />
-                  Provider Assignments ({serviceRequests?.length || 0})
+                  Bids & Assignments ({workOrderBids?.length || 0})
                 </div>
               </button>
             </div>
