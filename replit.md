@@ -242,6 +242,9 @@ Changelog:
 - January 26, 2025. Corrected workflow: providers now directly accept work orders instead of bidding system
 - January 26, 2025. Implemented POST /api/work-orders/:id/accept endpoint for direct work acceptance
 - January 26, 2025. Updated provider dashboard to show "Accept Work" instead of "Submit Bid" buttons
+- January 26, 2025. Implemented privacy protection: providers see only work description and budget initially
+- January 26, 2025. Added call center approval workflow to release full client details and address after acceptance
+- January 26, 2025. Created two-stage disclosure: basic work info → approval → full client contact details
 ```
 
 ## User Preferences

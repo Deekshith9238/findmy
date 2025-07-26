@@ -1864,7 +1864,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get available work orders for providers
+  // Get available work orders for providers (privacy-protected)
   app.get("/api/work-orders/available", async (req, res) => {
     if (!req.isAuthenticated()) {
       return res.status(401).json({ message: "You must be logged in" });
@@ -1894,7 +1894,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
       }
 
-      res.json(workOrders);
+      // Privacy protection: Remove sensitive client info for initial display
+      const protectedWorkOrders = workOrders.map(wo => ({
+        ...wo,
+        // Keep basic info
+        id: wo.id,
+        title: wo.title,
+        description: wo.description,
+        jobType: wo.jobType,
+        budget: wo.budget,
+        isBudgetFlexible: wo.isBudgetFlexible,
+        estimatedDuration: wo.estimatedDuration,
+        experienceLevel: wo.experienceLevel,
+        skillsRequired: wo.skillsRequired,
+        status: wo.status,
+        createdAt: wo.createdAt,
+        allowBidding: wo.allowBidding,
+        category: wo.category,
+        
+        // Hide sensitive info until approval
+        siteAddress: "Address will be provided after acceptance",
+        clientPhoneNumber: "Contact info provided after acceptance",
+        clientEmail: "Contact info provided after acceptance",
+        
+        // Show only city/state, not full address
+        siteCity: wo.siteCity,
+        siteState: wo.siteState,
+        
+        // Hide client personal details
+        client: {
+          firstName: "Client",
+          lastName: "Name Hidden",
+          // Don't expose personal info
+        },
+        
+        // Calculate and show approximate distance only
+        distance: wo.distance ? Math.round(wo.distance) : null
+      }));
+
+      res.json(protectedWorkOrders);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch available work orders" });
     }
@@ -2044,21 +2082,120 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: 'assigned'
       });
 
-      // Notify client about work acceptance
-      const notification = await storage.createNotification({
+      // Create call center assignment for approval
+      const callCenterAssignment = await storage.createCallCenterAssignment({
+        workOrderId: workOrder.id,
+        providerId: provider.id,
+        status: 'pending_approval',
+        assignedAt: new Date(),
+        notes: `Provider ${provider.user.firstName} ${provider.user.lastName} accepted work order "${workOrder.title}"`
+      });
+
+      // Notify call center staff for approval
+      const callCenterStaff = await storage.getUsersByRole('call_center');
+      for (const staff of callCenterStaff) {
+        const notification = await storage.createNotification({
+          userId: staff.id,
+          type: 'approval_needed',
+          title: 'Work Assignment Needs Approval',
+          message: `${provider.user.firstName} ${provider.user.lastName} wants to work on "${workOrder.title}" - Review and approve to release client details`,
+          data: JSON.stringify({ workOrderId, providerId: provider.id, assignmentId: callCenterAssignment.id })
+        });
+        
+        await sendNotificationToUser(staff.id, notification);
+      }
+
+      // Notify client about work acceptance (but not assigned yet)
+      const clientNotification = await storage.createNotification({
         userId: workOrder.clientId,
-        type: 'work_accepted',
-        title: 'Provider Accepted Your Work Order',
-        message: `${provider.user.firstName} ${provider.user.lastName} has accepted your work order "${workOrder.title}"`,
+        type: 'work_interest',
+        title: 'Provider Interested in Your Work Order',
+        message: `A qualified provider has shown interest in your work order "${workOrder.title}". We're reviewing the match and will notify you once approved.`,
         data: JSON.stringify({ workOrderId, providerId: provider.id })
       });
       
-      await sendNotificationToUser(workOrder.clientId, notification);
+      await sendNotificationToUser(workOrder.clientId, clientNotification);
 
-      res.json({ message: "Work order accepted successfully", workOrderId });
+      res.json({ 
+        message: "Work interest submitted successfully. Awaiting call center approval for client details.", 
+        workOrderId,
+        status: 'pending_approval'
+      });
     } catch (error) {
       console.error('Work order acceptance error:', error);
       res.status(500).json({ message: "Failed to accept work order" });
+    }
+  });
+
+  // Call center approval endpoint - Release full client details to provider
+  app.post("/api/call-center/assignments/:assignmentId/approve", async (req, res) => {
+    if (!req.isAuthenticated() || !['admin', 'call_center'].includes(req.user!.role)) {
+      return res.status(403).json({ message: "Access denied. Call center staff only." });
+    }
+
+    try {
+      const assignmentId = parseInt(req.params.assignmentId);
+      const assignment = await storage.getCallCenterAssignment(assignmentId);
+      
+      if (!assignment) {
+        return res.status(404).json({ message: "Assignment not found" });
+      }
+
+      if (assignment.status !== 'pending_approval') {
+        return res.status(400).json({ message: "Assignment already processed" });
+      }
+
+      // Update assignment status
+      await storage.updateCallCenterAssignment(assignmentId, {
+        status: 'approved',
+        handledBy: req.user!.id,
+        handledAt: new Date()
+      });
+
+      // Now actually assign the work order
+      await storage.updateWorkOrder(assignment.workOrderId, {
+        assignedProviderId: assignment.providerId,
+        status: 'assigned'
+      });
+
+      // Get full work order details for notifications
+      const workOrder = await storage.getWorkOrderWithDetails(assignment.workOrderId);
+      const provider = await storage.getServiceProvider(assignment.providerId);
+
+      // Notify provider with FULL client details
+      const providerNotification = await storage.createNotification({
+        userId: provider.userId,
+        type: 'work_approved',
+        title: 'Work Assignment Approved - Client Details Released',
+        message: `Your work assignment for "${workOrder.title}" has been approved. Client details: ${workOrder.client.firstName} ${workOrder.client.lastName}, ${workOrder.clientPhoneNumber}. Address: ${workOrder.siteAddress}, ${workOrder.siteCity}, ${workOrder.siteState}`,
+        data: JSON.stringify({ 
+          workOrderId: workOrder.id, 
+          clientDetails: {
+            name: `${workOrder.client.firstName} ${workOrder.client.lastName}`,
+            phone: workOrder.clientPhoneNumber,
+            email: workOrder.clientEmail,
+            address: `${workOrder.siteAddress}, ${workOrder.siteCity}, ${workOrder.siteState}`
+          }
+        })
+      });
+      
+      await sendNotificationToUser(provider.userId, providerNotification);
+
+      // Notify client about final assignment
+      const clientNotification = await storage.createNotification({
+        userId: workOrder.clientId,
+        type: 'work_assigned',
+        title: 'Work Order Assigned',
+        message: `Your work order "${workOrder.title}" has been assigned to ${provider.user.firstName} ${provider.user.lastName}. They will contact you soon to schedule the work.`,
+        data: JSON.stringify({ workOrderId: workOrder.id, providerId: provider.id })
+      });
+      
+      await sendNotificationToUser(workOrder.clientId, clientNotification);
+
+      res.json({ message: "Work assignment approved and client details released to provider" });
+    } catch (error) {
+      console.error('Assignment approval error:', error);
+      res.status(500).json({ message: "Failed to approve assignment" });
     }
   });
 
