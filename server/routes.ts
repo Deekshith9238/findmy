@@ -78,6 +78,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: "OTP sent successfully", 
         email: email.replace(/(.{3}).*(@.*)/, '$1***$2') // Mask email for security
       });
+
+  // Initialize session middleware for OTP authentication (MUST be before routes)
+  app.use(session({
+    secret: process.env.SESSION_SECRET || 'your-secret-key',
+    resave: false,
+    saveUninitialized: false,
+    cookie: { secure: false, maxAge: 24 * 60 * 60 * 1000 } // 24 hours
+  }));
+
+  // Initialize passport for session management
+  app.use(passport.initialize());
+  app.use(passport.session());
+
+  // Serialize/deserialize user for session
+  passport.serializeUser((user: any, done) => {
+    done(null, user.id);
+  });
+
+  passport.deserializeUser(async (id: any, done) => {
+    try {
+      const user = await storage.getUser(id);
+      done(null, user);
+    } catch (error) {
+      done(error, null);
+    }
+  });
+
+  // Authentication middleware
+  
     } catch (error) {
       console.error('Send OTP error:', error);
       res.status(500).json({ message: "Failed to send OTP" });
@@ -172,11 +201,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Login successful - create session manually
+      if (!req.session) {
+        return res.status(500).json({ message: "Session not initialized" });
+      }
       req.session.user = {
         id: user.id,
         email: user.email,
         firstName: user.firstName,
         lastName: user.lastName,
+        username: user.username,
         role: user.role
       };
       
@@ -196,40 +229,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Initialize session middleware for OTP authentication
-  app.use(session({
-    secret: process.env.SESSION_SECRET || 'your-secret-key',
-    resave: false,
-    saveUninitialized: false,
-    cookie: { secure: false, maxAge: 24 * 60 * 60 * 1000 } // 24 hours
-  }));
-
-  // Initialize passport for session management
-  app.use(passport.initialize());
-  app.use(passport.session());
-
-  // Serialize/deserialize user for session
-  passport.serializeUser((user: any, done) => {
-    done(null, user.id);
-  });
-
-  passport.deserializeUser(async (id: any, done) => {
-    try {
-      const user = await storage.getUser(id);
-      done(null, user);
-    } catch (error) {
-      done(error, null);
-    }
-  });
-
-  // Authentication middleware
-  const isAuthenticated = (req: any, res: any, next: any) => {
-    if (req.session && req.session.user) {
-      req.user = req.session.user;
-      return next();
-    }
-    return res.status(401).json({ message: "Unauthorized" });
-  };
+  
 
   // Service categories routes
   app.get("/api/categories", async (_req, res) => {
@@ -323,6 +323,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Get current user's service provider profile
   app.get("/api/providers/me", async (req, res) => {
+    if (!req.session || !req.session.user) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+    req.user = req.session.user;
+
     console.log('=== /api/providers/me route hit ===');
     console.log('(req.session && req.session.user):', (req.session && req.session.user));
     console.log('req.user:', req.user);
@@ -374,6 +379,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Update current user's service provider profile
   app.put("/api/providers/me", async (req, res) => {
+    if (!req.session || !req.session.user) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+    req.user = req.session.user;
+
     if (!req.session || !req.session.user) {
       return res.status(401).json({ message: "You must be logged in" });
     }
@@ -482,6 +492,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(401).json({ message: "You must be logged in" });
     }
     req.user = req.session.user;
+
+    if (!req.session || !req.session.user) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+    req.user = req.session.user;
     
     try {
       const tasks = await storage.getTasksByClient(req.user.id);
@@ -537,6 +552,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(401).json({ message: "You must be logged in" });
     }
     req.user = req.session.user;
+
+    if (!req.session || !req.session.user) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+    req.user = req.session.user;
     
     try {
       const taskId = parseInt(req.params.id);
@@ -560,6 +580,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Service Requests routes (creation handled later with enhanced call center workflow)
   
   app.get("/api/service-requests/client", async (req, res) => {
+    if (!req.session || !req.session.user) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+    req.user = req.session.user;
+
     if (!req.session || !req.session.user) {
       return res.status(401).json({ message: "You must be logged in" });
     }
@@ -622,6 +647,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(401).json({ message: "You must be logged in" });
     }
     req.user = req.session.user;
+
+    if (!req.session || !req.session.user) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+    req.user = req.session.user;
     
     try {
       // Get the provider profile for the current user
@@ -660,6 +690,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   app.put("/api/service-requests/:id", async (req, res) => {
+    if (!req.session || !req.session.user) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+    req.user = req.session.user;
+
     if (!req.session || !req.session.user) {
       return res.status(401).json({ message: "You must be logged in" });
     }
@@ -1170,6 +1205,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(401).json({ message: "You must be logged in" });
     }
     req.user = req.session.user;
+
+    if (!req.session || !req.session.user) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+    req.user = req.session.user;
     
     try {
       const notifications = await storage.getNotifications(req.user.id);
@@ -1251,6 +1291,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Get current user's service provider profile
   app.get("/api/providers/me", async (req, res) => {
+    if (!req.session || !req.session.user) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+    req.user = req.session.user;
+
     console.log('=== /api/providers/me route hit ===');
     console.log('(req.session && req.session.user):', (req.session && req.session.user));
     console.log('req.user:', req.user);
@@ -1302,6 +1347,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Update current user's service provider profile
   app.put("/api/providers/me", async (req, res) => {
+    if (!req.session || !req.session.user) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+    req.user = req.session.user;
+
     if (!req.session || !req.session.user) {
       return res.status(401).json({ message: "You must be logged in" });
     }
@@ -1415,7 +1465,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Enhanced task creation with location-based notifications
   app.post("/api/tasks", async (req, res) => {
     if (!req.session || !req.session.user) {
-      return res.status(401).json({ message: "You must be logged in to create a task" });
+      return res.status(401).json({ message: "You must be logged in" });
     }
     req.user = req.session.user;
     
@@ -1790,6 +1840,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
             provider,
             photos
           };
+
+  // User authentication status endpoint
+  app.get('/api/user', (req, res) => {
+    if (req.session && req.session.user) {
+      res.json(req.session.user);
+    } else {
+      res.status(401).json({ message: "Not authenticated" });
+    }
+  });
         })
       );
 
