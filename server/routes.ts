@@ -1,8 +1,9 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
+import session from "express-session";
 import { storage } from "./storage";
-import { setupAuth, hashPassword } from "./auth";
+import { createOTP, verifyOTP, hashPassword, verifyPassword } from "./auth";
 import { pool, db } from "./db";
 import { z } from "zod";
 import { serviceProviders } from "@shared/schema";
@@ -53,8 +54,151 @@ const PLATFORM_FEE_PERCENTAGE = 0.15; // 15% platform fee
 const TAX_RATE = 0.08; // 8% tax rate
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Set up authentication routes
-  setupAuth(app);
+  // ==============================
+  // OTP AUTHENTICATION ROUTES
+  // ==============================
+
+  // Send OTP for email verification or login
+  app.post("/api/auth/send-otp", async (req, res) => {
+    try {
+      const { email, purpose } = req.body;
+      
+      if (!email || !purpose) {
+        return res.status(400).json({ message: "Email and purpose are required" });
+      }
+
+      if (!['email_verification', 'login_verification', 'password_reset'].includes(purpose)) {
+        return res.status(400).json({ message: "Invalid purpose" });
+      }
+
+      const otpCode = await createOTP(email, purpose);
+      
+      res.json({ 
+        message: "OTP sent successfully", 
+        email: email.replace(/(.{3}).*(@.*)/, '$1***$2') // Mask email for security
+      });
+    } catch (error) {
+      console.error('Send OTP error:', error);
+      res.status(500).json({ message: "Failed to send OTP" });
+    }
+  });
+
+  // Verify OTP and complete registration
+  app.post("/api/auth/verify-otp-register", async (req, res) => {
+    try {
+      const { email, otp, password, firstName, lastName, role, username } = req.body;
+      
+      if (!email || !otp || !password || !firstName || !lastName || !username) {
+        return res.status(400).json({ message: "All fields are required" });
+      }
+
+      // Verify OTP
+      const otpResult = await verifyOTP(email, otp, 'email_verification');
+      if (!otpResult.success) {
+        return res.status(400).json({ message: otpResult.message });
+      }
+
+      // Check if user already exists
+      const existingUser = await storage.getUserByEmail(email);
+      if (existingUser) {
+        return res.status(400).json({ message: "User already exists" });
+      }
+
+      // Create user with verified email
+      const hashedPassword = hashPassword(password);
+      const userData = insertUserSchema.parse({
+        username,
+        email,
+        password: hashedPassword,
+        firstName,
+        lastName,
+        role: role || 'client',
+        isEmailVerified: true
+      });
+
+      const user = await storage.createUser(userData);
+      
+      res.status(201).json({ 
+        message: "Registration successful", 
+        user: { 
+          id: user.id, 
+          email: user.email, 
+          firstName: user.firstName, 
+          lastName: user.lastName,
+          role: user.role 
+        } 
+      });
+    } catch (error) {
+      console.error('OTP registration error:', error);
+      res.status(500).json({ message: "Registration failed" });
+    }
+  });
+
+  // Login with email + password + optional OTP
+  app.post("/api/auth/login-otp", async (req, res) => {
+    try {
+      const { email, password, otp } = req.body;
+      
+      if (!email || !password) {
+        return res.status(400).json({ message: "Email and password are required" });
+      }
+
+      // Check if user exists
+      const user = await storage.getUserByEmail(email);
+      if (!user) {
+        return res.status(401).json({ message: "Invalid credentials" });
+      }
+
+      // Verify password
+      if (!verifyPassword(password, user.password)) {
+        return res.status(401).json({ message: "Invalid credentials" });
+      }
+
+      // Check if OTP is required (for additional security)
+      if (otp) {
+        const otpResult = await verifyOTP(email, otp, 'login_verification');
+        if (!otpResult.success) {
+          return res.status(400).json({ message: otpResult.message });
+        }
+      }
+
+      // Check if email is verified
+      if (!user.isEmailVerified) {
+        return res.status(400).json({ 
+          message: "Email not verified. Please verify your email first.",
+          requiresEmailVerification: true 
+        });
+      }
+
+      // Login successful - create session
+      req.login(user, (err) => {
+        if (err) {
+          return res.status(500).json({ message: "Login failed" });
+        }
+        res.json({ 
+          message: "Login successful", 
+          user: { 
+            id: user.id, 
+            email: user.email, 
+            firstName: user.firstName, 
+            lastName: user.lastName,
+            role: user.role 
+          } 
+        });
+      });
+    } catch (error) {
+      console.error('Login error:', error);
+      res.status(500).json({ message: "Login failed" });
+    }
+  });
+
+  // Initialize session middleware for OTP authentication
+  app.use(session({
+    secret: process.env.SESSION_SECRET || 'your-secret-key',
+    resave: false,
+    saveUninitialized: false,
+    cookie: { secure: false, maxAge: 24 * 60 * 60 * 1000 } // 24 hours
+  }));
 
   // Service categories routes
   app.get("/api/categories", async (_req, res) => {

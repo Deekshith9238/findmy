@@ -35,9 +35,22 @@ export const users = pgTable("users", {
   bankAccountType: text("bank_account_type"), // 'checking' or 'savings'
   isBankAccountVerified: boolean("is_bank_account_verified").notNull().default(false),
   isActive: boolean("is_active").notNull().default(true),
+  isEmailVerified: boolean("is_email_verified").notNull().default(false),
   createdBy: integer("created_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// OTP verification table for email verification and additional security
+export const otpVerifications = pgTable("otp_verifications", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull(),
+  otpCode: text("otp_code").notNull(),
+  purpose: text("purpose").notNull(), // 'email_verification', 'login_verification', 'password_reset'
+  expiresAt: timestamp("expires_at").notNull(),
+  isUsed: boolean("is_used").notNull().default(false),
+  attempts: integer("attempts").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
 // User relations
@@ -774,3 +787,8 @@ export type ServiceProviderWithSkills = ServiceProvider & {
 export type JobBidWithProvider = JobBid & {
   provider: ServiceProvider & { user: User };
 };
+
+// OTP verification schemas
+export const insertOtpVerificationSchema = createInsertSchema(otpVerifications);
+export type InsertOtpVerification = z.infer<typeof insertOtpVerificationSchema>;
+export type OtpVerification = typeof otpVerifications.$inferSelect;

@@ -15,7 +15,8 @@ import {
   workOrders, type WorkOrder, type InsertWorkOrder,
   jobBids, type JobBid, type InsertJobBid,
   providerSkills, type ProviderSkill, type InsertProviderSkill,
-  providerEquipment, type ProviderEquipment, type InsertProviderEquipment
+  providerEquipment, type ProviderEquipment, type InsertProviderEquipment,
+  otpVerifications, type OtpVerification, type InsertOtpVerification
 } from "@shared/schema";
 import session from "express-session";
 import createMemoryStore from "memorystore";
@@ -661,6 +662,35 @@ export class DatabaseStorage implements IStorage {
   async getUserByEmail(email: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.email, email));
     return user;
+  }
+
+  // OTP verification methods
+  async createOtpVerification(data: InsertOtpVerification): Promise<OtpVerification> {
+    const [otp] = await db.insert(otpVerifications).values(data).returning();
+    return otp;
+  }
+
+  async getOtpVerification(email: string, otpCode: string, purpose: string): Promise<OtpVerification | undefined> {
+    const [otp] = await db
+      .select()
+      .from(otpVerifications)
+      .where(
+        and(
+          eq(otpVerifications.email, email),
+          eq(otpVerifications.otpCode, otpCode),
+          eq(otpVerifications.purpose, purpose)
+        )
+      )
+      .orderBy(desc(otpVerifications.createdAt));
+    return otp;
+  }
+
+  async updateOtpVerification(id: number, updates: Partial<InsertOtpVerification>): Promise<void> {
+    await db.update(otpVerifications).set(updates).where(eq(otpVerifications.id, id));
+  }
+
+  async updateUserEmailVerification(userId: number, isVerified: boolean): Promise<void> {
+    await db.update(users).set({ isEmailVerified: isVerified }).where(eq(users.id, userId));
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {

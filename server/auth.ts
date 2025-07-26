@@ -1,281 +1,89 @@
-import passport from "passport";
-import { Strategy as LocalStrategy } from "passport-local";
-import { Express } from "express";
-import session from "express-session";
-import { scrypt, randomBytes, timingSafeEqual } from "crypto";
-import { promisify } from "util";
-import { storage } from "./storage";
-import { User as SelectUser } from "@shared/schema";
-import { z } from "zod";
-import { insertUserSchema } from "@shared/schema";
+import * as crypto from 'crypto';
+import { storage } from './storage';
 
-declare global {
-  namespace Express {
-    interface User extends SelectUser {}
-  }
+// Generate 6-digit OTP
+export function generateOTP(): string {
+  return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
-const scryptAsync = promisify(scrypt);
-
-export async function hashPassword(password: string) {
-  const salt = randomBytes(16).toString("hex");
-  const buf = (await scryptAsync(password, salt, 64)) as Buffer;
-  return `${buf.toString("hex")}.${salt}`;
-}
-
-async function comparePasswords(supplied: string, stored: string) {
-  if (!stored || !stored.includes(".")) {
-    console.error("Invalid password format stored:", stored);
+// Send OTP via email (mock implementation - replace with real email service)
+export async function sendOTPEmail(email: string, otp: string, purpose: string): Promise<boolean> {
+  try {
+    // TODO: Replace with real email service (SendGrid, AWS SES, etc.)
+    console.log(`📧 Sending OTP to ${email}: ${otp} (Purpose: ${purpose})`);
+    
+    // Mock email sending - always succeeds in development
+    // In production, integrate with:
+    // - SendGrid: sgMail.send({ to: email, subject: `Your OTP Code: ${otp}`, text: `Your verification code is: ${otp}` })
+    // - AWS SES: ses.sendEmail({ Destination: { ToAddresses: [email] }, Message: { Subject: { Data: `OTP: ${otp}` }, Body: { Text: { Data: `Your code: ${otp}` } } } })
+    // - Nodemailer: transporter.sendMail({ from: 'noreply@findmyhelper.com', to: email, subject: `OTP: ${otp}`, text: `Your verification code is: ${otp}` })
+    
+    return true;
+  } catch (error) {
+    console.error('Failed to send OTP email:', error);
     return false;
   }
-  
-  const [hashed, salt] = stored.split(".");
-  if (!hashed || !salt) {
-    console.error("Password missing hash or salt:", { hashed: !!hashed, salt: !!salt });
-    return false;
-  }
-  
-  const hashedBuf = Buffer.from(hashed, "hex");
-  const suppliedBuf = (await scryptAsync(supplied, salt, 64)) as Buffer;
-  return timingSafeEqual(hashedBuf, suppliedBuf);
 }
 
-// Schema for user registration (backend only - confirmPassword validation happens on frontend)
-// Bank details are no longer required during registration
-const registerSchema = insertUserSchema.extend({
-  isServiceProvider: z.boolean(),
-  // Service provider fields (optional, validated separately)
-  categoryId: z.number().optional(),
-  hourlyRate: z.number().optional(),
-  bio: z.string().optional(),
-  yearsOfExperience: z.number().optional(),
-  availability: z.string().optional(),
-});
-
-// Schema for service provider additional info
-const providerExtendedSchema = z.object({
-  categoryId: z.number(),
-  hourlyRate: z.number().min(1),
-  bio: z.string().optional(),
-  yearsOfExperience: z.number().optional(),
-  availability: z.string().optional(),
-});
-
-export function setupAuth(app: Express) {
-  const sessionSettings: session.SessionOptions = {
-    secret: process.env.SESSION_SECRET || "taskhire-secret-key",
-    resave: false,
-    saveUninitialized: false,
-    store: storage.sessionStore,
-    cookie: {
-      maxAge: 24 * 60 * 60 * 1000, // 24 hours
-    }
-  };
-
-  app.set("trust proxy", 1);
-  app.use(session(sessionSettings));
-  app.use(passport.initialize());
-  app.use(passport.session());
-
-  passport.use(
-    new LocalStrategy(
-      {
-        usernameField: "email",
-        passwordField: "password"
-      },
-      async (email, password, done) => {
-        try {
-          const user = await storage.getUserByEmail(email);
-          if (!user || !(await comparePasswords(password, user.password))) {
-            return done(null, false, { message: "Invalid email or password" });
-          } else {
-            return done(null, user);
-          }
-        } catch (err) {
-          return done(err);
-        }
-      }
-    )
-  );
-
-  passport.serializeUser((user, done) => done(null, user.id));
-  passport.deserializeUser(async (id: number, done) => {
-    try {
-      const user = await storage.getUser(id);
-      done(null, user);
-    } catch (err) {
-      done(err);
-    }
-  });
-
-  app.post("/api/register", async (req, res, next) => {
-    try {
-      console.log("Registration request body:", req.body);
-      
-      // Validate the registration data
-      const validatedData = registerSchema.parse(req.body);
-      
-      // Check if email already exists
-      const existingUserByEmail = await storage.getUserByEmail(validatedData.email);
-      if (existingUserByEmail) {
-        return res.status(400).json({ message: "Email already exists" });
-      }
-      
-      // Check if username already exists
-      const existingUserByUsername = await storage.getUserByUsername(validatedData.username);
-      if (existingUserByUsername) {
-        return res.status(400).json({ message: "Username already exists" });
-      }
-      
-      // Hash password and create the user
-      const user = await storage.createUser({
-        ...validatedData,
-        password: await hashPassword(validatedData.password)
-      });
-      
-      // If user is a service provider, create service provider profile
-      if (validatedData.isServiceProvider) {
-        try {
-          // Validate required provider fields
-          if (!validatedData.categoryId || !validatedData.hourlyRate) {
-            return res.status(400).json({ 
-              message: "Category and hourly rate are required for service providers" 
-            });
-          }
-          
-          await storage.createServiceProvider({
-            userId: user.id,
-            categoryId: validatedData.categoryId,
-            hourlyRate: validatedData.hourlyRate,
-            bio: validatedData.bio || "",
-            yearsOfExperience: validatedData.yearsOfExperience || 0,
-            availability: validatedData.availability || ""
-          });
-        } catch (err) {
-          // If service provider profile creation fails, still let the user register
-          // but return a warning
-          console.error("Failed to create service provider profile:", err);
-          return res.status(201).json({ 
-            user,
-            warning: "User created but service provider profile could not be created"
-          });
-        }
-      }
-
-      // Log the user in
-      req.login(user, (err) => {
-        if (err) return next(err);
-        return res.status(201).json(user);
-      });
-    } catch (err) {
-      if (err instanceof z.ZodError) {
-        console.error("Registration validation error:", err.errors);
-        return res.status(400).json({ 
-          message: "Validation error", 
-          errors: err.errors 
-        });
-      }
-      console.error("Registration error:", err);
-      next(err);
-    }
-  });
-
-  app.post("/api/login", (req, res, next) => {
-    passport.authenticate("local", (err, user, info) => {
-      if (err) return next(err);
-      if (!user) {
-        return res.status(401).json({ message: info?.message || "Invalid credentials" });
-      }
-      
-      req.login(user, (err) => {
-        if (err) return next(err);
-        return res.status(200).json(user);
-      });
-    })(req, res, next);
-  });
-
-  app.post("/api/logout", (req, res, next) => {
-    req.logout((err) => {
-      if (err) return next(err);
-      res.sendStatus(200);
-    });
-  });
-
-  app.get("/api/user", (req, res) => {
-    if (!req.isAuthenticated()) return res.sendStatus(401);
-    res.json(req.user);
+// Create and store OTP
+export async function createOTP(email: string, purpose: 'email_verification' | 'login_verification' | 'password_reset'): Promise<string> {
+  const otpCode = generateOTP();
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes from now
+  
+  await storage.createOtpVerification({
+    email,
+    otpCode,
+    purpose,
+    expiresAt,
+    isUsed: false,
+    attempts: 0
   });
   
-  app.get("/api/user/provider", async (req, res) => {
-    if (!req.isAuthenticated()) return res.sendStatus(401);
-    
-    try {
-      const provider = await storage.getServiceProviderByUserId(req.user.id);
-      if (!provider) {
-        return res.status(404).json({ message: "Provider profile not found" });
-      }
-      
-      const providerWithDetails = await storage.getServiceProviderWithUser(provider.id);
-      res.json(providerWithDetails);
-    } catch (err) {
-      res.status(500).json({ message: "Server error" });
-    }
-  });
+  await sendOTPEmail(email, otpCode, purpose);
+  return otpCode;
+}
 
-  app.put("/api/user", async (req, res) => {
-    if (!req.isAuthenticated()) return res.sendStatus(401);
+// Verify OTP
+export async function verifyOTP(email: string, otpCode: string, purpose: string): Promise<{ success: boolean; message: string }> {
+  try {
+    const otpRecord = await storage.getOtpVerification(email, otpCode, purpose);
     
-    try {
-      const { firstName, lastName, email, phoneNumber, profilePicture } = req.body;
-      
-      // Update user profile
-      const updatedUser = await storage.updateUser(req.user.id, {
-        firstName,
-        lastName,
-        email,
-        phoneNumber,
-        profilePicture,
-      });
-      
-      if (!updatedUser) {
-        return res.status(404).json({ message: "User not found" });
-      }
-      
-      res.json(updatedUser);
-    } catch (err) {
-      res.status(500).json({ message: "Failed to update profile" });
+    if (!otpRecord) {
+      return { success: false, message: 'Invalid OTP code' };
     }
-  });
+    
+    if (otpRecord.isUsed) {
+      return { success: false, message: 'OTP code already used' };
+    }
+    
+    if (new Date() > otpRecord.expiresAt) {
+      return { success: false, message: 'OTP code expired' };
+    }
+    
+    if (otpRecord.attempts >= 3) {
+      return { success: false, message: 'Too many attempts. Please request a new OTP' };
+    }
+    
+    // Mark OTP as used
+    await storage.updateOtpVerification(otpRecord.id, { isUsed: true });
+    
+    return { success: true, message: 'OTP verified successfully' };
+  } catch (error) {
+    console.error('OTP verification error:', error);
+    return { success: false, message: 'Verification failed' };
+  }
+}
 
-  app.put("/api/user/provider", async (req, res) => {
-    if (!req.isAuthenticated()) return res.sendStatus(401);
-    
-    try {
-      const { categoryId, hourlyRate, bio, yearsOfExperience, availability } = req.body;
-      
-      // Get existing provider profile
-      const provider = await storage.getServiceProviderByUserId(req.user.id);
-      
-      if (!provider) {
-        return res.status(404).json({ message: "Provider profile not found" });
-      }
-      
-      // Update provider profile
-      const updatedProvider = await storage.updateServiceProvider(provider.id, {
-        categoryId: parseInt(categoryId),
-        hourlyRate: parseFloat(hourlyRate),
-        bio,
-        yearsOfExperience: yearsOfExperience ? parseInt(yearsOfExperience) : null,
-        availability,
-      });
-      
-      if (!updatedProvider) {
-        return res.status(404).json({ message: "Failed to update provider profile" });
-      }
-      
-      res.json(updatedProvider);
-    } catch (err) {
-      res.status(500).json({ message: "Failed to update provider profile" });
-    }
-  });
+// Hash password
+export function hashPassword(password: string): string {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
+  return `${salt}:${hash}`;
+}
+
+// Verify password
+export function verifyPassword(password: string, hashedPassword: string): boolean {
+  const [salt, hash] = hashedPassword.split(':');
+  const verifyHash = crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
+  return hash === verifyHash;
 }

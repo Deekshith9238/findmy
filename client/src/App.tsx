@@ -20,6 +20,7 @@ import PaymentPage from "@/pages/payment-page";
 import PaymentApprovalsPage from "@/pages/payment-approvals";
 import PaymentApproverDashboard from "@/pages/payment-approver-dashboard";
 import WorkOrdersPage from "@/pages/work-orders-page";
+import OTPLogin from "@/components/OTPLogin";
 import { ProtectedRoute } from "./lib/protected-route";
 import { AuthProvider } from "./hooks/use-auth";
 
@@ -28,6 +29,7 @@ function Router() {
     <Switch>
       <Route path="/" component={HomePage} />
       <Route path="/auth" component={AuthPage} />
+      <Route path="/otp-auth" component={OTPLogin} />
       <Route path="/service-categories" component={ServiceCategories} />
       <Route path="/provider/:id" component={ServiceProviderProfile} />
 
