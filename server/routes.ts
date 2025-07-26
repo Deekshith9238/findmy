@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import session from "express-session";
+import passport from "passport";
 import { storage } from "./storage";
 import { createOTP, verifyOTP, hashPassword, verifyPassword } from "./auth";
 import { pool, db } from "./db";
@@ -203,6 +204,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     cookie: { secure: false, maxAge: 24 * 60 * 60 * 1000 } // 24 hours
   }));
 
+  // Initialize passport for session management
+  app.use(passport.initialize());
+  app.use(passport.session());
+
+  // Serialize/deserialize user for session
+  passport.serializeUser((user: any, done) => {
+    done(null, user.id);
+  });
+
+  passport.deserializeUser(async (id: any, done) => {
+    try {
+      const user = await storage.getUser(id);
+      done(null, user);
+    } catch (error) {
+      done(error, null);
+    }
+  });
+
+  // Authentication middleware
+  const isAuthenticated = (req: any, res: any, next: any) => {
+    if (req.session && req.session.user) {
+      req.user = req.session.user;
+      return next();
+    }
+    return res.status(401).json({ message: "Unauthorized" });
+  };
+
   // Service categories routes
   app.get("/api/categories", async (_req, res) => {
     try {
@@ -296,13 +324,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get current user's service provider profile
   app.get("/api/providers/me", async (req, res) => {
     console.log('=== /api/providers/me route hit ===');
-    console.log('req.isAuthenticated():', req.isAuthenticated());
+    console.log('(req.session && req.session.user):', (req.session && req.session.user));
     console.log('req.user:', req.user);
     
-    if (!req.isAuthenticated()) {
-      console.log('Authentication failed');
+    if (!req.session || !req.session.user) {
       return res.status(401).json({ message: "You must be logged in" });
     }
+    req.user = req.session.user;
     
     try {
       console.log('Fetching provider for user ID:', req.user.id);
@@ -346,9 +374,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Update current user's service provider profile
   app.put("/api/providers/me", async (req, res) => {
-    if (!req.isAuthenticated()) {
+    if (!req.session || !req.session.user) {
       return res.status(401).json({ message: "You must be logged in" });
     }
+    req.user = req.session.user;
     
     try {
       const { categoryId, hourlyRate, bio, experience } = req.body;
@@ -449,9 +478,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   app.get("/api/tasks/client", async (req, res) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ message: "You must be logged in to view your tasks" });
+    if (!req.session || !req.session.user) {
+      return res.status(401).json({ message: "You must be logged in" });
     }
+    req.user = req.session.user;
     
     try {
       const tasks = await storage.getTasksByClient(req.user.id);
@@ -503,9 +533,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   app.put("/api/tasks/:id", async (req, res) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ message: "You must be logged in to update a task" });
+    if (!req.session || !req.session.user) {
+      return res.status(401).json({ message: "You must be logged in" });
     }
+    req.user = req.session.user;
     
     try {
       const taskId = parseInt(req.params.id);
@@ -529,9 +560,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Service Requests routes (creation handled later with enhanced call center workflow)
   
   app.get("/api/service-requests/client", async (req, res) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ message: "You must be logged in to view your requests" });
+    if (!req.session || !req.session.user) {
+      return res.status(401).json({ message: "You must be logged in" });
     }
+    req.user = req.session.user;
     
     try {
       const requests = await storage.getServiceRequestsByClient(req.user.id);
@@ -560,9 +592,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Get approved service requests for current service provider (for map access)
   app.get("/api/service-requests/approved", async (req, res) => {
-    if (!req.isAuthenticated()) {
+    if (!req.session || !req.session.user) {
       return res.status(401).json({ message: "You must be logged in" });
     }
+    req.user = req.session.user;
 
     try {
       if (req.user.role !== 'service_provider') {
@@ -585,9 +618,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.get("/api/service-requests/provider", async (req, res) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ message: "You must be logged in to view requests" });
+    if (!req.session || !req.session.user) {
+      return res.status(401).json({ message: "You must be logged in" });
     }
+    req.user = req.session.user;
     
     try {
       // Get the provider profile for the current user
@@ -626,9 +660,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   app.put("/api/service-requests/:id", async (req, res) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ message: "You must be logged in to update a request" });
+    if (!req.session || !req.session.user) {
+      return res.status(401).json({ message: "You must be logged in" });
     }
+    req.user = req.session.user;
     
     try {
       const requestId = parseInt(req.params.id);
@@ -703,9 +738,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Reviews routes
   app.post("/api/reviews", async (req, res) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ message: "You must be logged in to create a review" });
+    if (!req.session || !req.session.user) {
+      return res.status(401).json({ message: "You must be logged in" });
     }
+    req.user = req.session.user;
     
     try {
       // Verify the service request exists and belongs to this user
@@ -745,9 +781,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Profile picture update route
   app.put("/api/user/profile-picture", async (req, res) => {
-    if (!req.isAuthenticated()) {
+    if (!req.session || !req.session.user) {
       return res.status(401).json({ message: "You must be logged in" });
     }
+    req.user = req.session.user;
 
     try {
       const { profilePicture } = req.body;
@@ -775,9 +812,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Change password route
   app.put("/api/user/change-password", async (req, res) => {
-    if (!req.isAuthenticated()) {
+    if (!req.session || !req.session.user) {
       return res.status(401).json({ message: "You must be logged in" });
     }
+    req.user = req.session.user;
 
     try {
       const { currentPassword, newPassword } = req.body;
@@ -822,9 +860,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Get provider documents
   app.get("/api/provider/documents/:providerId", async (req, res) => {
-    if (!req.isAuthenticated()) {
+    if (!req.session || !req.session.user) {
       return res.status(401).json({ message: "You must be logged in" });
     }
+    req.user = req.session.user;
 
     try {
       const providerId = parseInt(req.params.providerId);
@@ -848,9 +887,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Upload provider document
   app.post("/api/provider/documents", async (req, res) => {
-    if (!req.isAuthenticated()) {
+    if (!req.session || !req.session.user) {
       return res.status(401).json({ message: "You must be logged in" });
     }
+    req.user = req.session.user;
 
     try {
       const { providerId, documentType, documentUrl, originalName } = req.body;
@@ -877,9 +917,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Get provider documents (for current user)
   app.get("/api/user/provider/documents", async (req, res) => {
-    if (!req.isAuthenticated()) {
+    if (!req.session || !req.session.user) {
       return res.status(401).json({ message: "You must be logged in" });
     }
+    req.user = req.session.user;
 
     try {
       const provider = await storage.getServiceProviderByUserId(req.user.id);
@@ -896,9 +937,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Document verification routes for admins and service verifiers
   app.get("/api/admin/documents/pending", async (req, res) => {
-    if (!req.isAuthenticated()) {
+    if (!req.session || !req.session.user) {
       return res.status(401).json({ message: "You must be logged in" });
     }
+    req.user = req.session.user;
 
     if (!['admin', 'service_verifier'].includes(req.user.role)) {
       return res.status(403).json({ message: "Access denied. Admin or service verifier role required." });
@@ -923,9 +965,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Verify or reject document
   app.put("/api/admin/documents/:documentId/verify", async (req, res) => {
-    if (!req.isAuthenticated()) {
+    if (!req.session || !req.session.user) {
       return res.status(401).json({ message: "You must be logged in" });
     }
+    req.user = req.session.user;
 
     if (!['admin', 'service_verifier'].includes(req.user.role)) {
       return res.status(403).json({ message: "Access denied. Admin or service verifier role required." });
@@ -987,9 +1030,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Admin routes
   app.get('/api/admin/staff', async (req, res) => {
-    if (!req.isAuthenticated()) {
+    if (!req.session || !req.session.user) {
       return res.status(401).json({ message: "You must be logged in" });
     }
+    req.user = req.session.user;
     
     if (req.user.email !== 'findmyhelper2025@gmail.com') {
       return res.status(403).json({ message: 'Admin access required' });
@@ -1005,9 +1049,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post('/api/admin/create-user', async (req, res) => {
-    if (!req.isAuthenticated()) {
+    if (!req.session || !req.session.user) {
       return res.status(401).json({ message: "You must be logged in" });
     }
+    req.user = req.session.user;
     
     if (req.user.email !== 'findmyhelper2025@gmail.com') {
       return res.status(403).json({ message: 'Admin access required' });
@@ -1056,9 +1101,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Get all users for admin
   app.get('/api/admin/users', async (req, res) => {
-    if (!req.isAuthenticated()) {
+    if (!req.session || !req.session.user) {
       return res.status(401).json({ message: "You must be logged in" });
     }
+    req.user = req.session.user;
     
     if (req.user.email !== 'findmyhelper2025@gmail.com') {
       return res.status(403).json({ message: 'Admin access required' });
@@ -1079,9 +1125,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.delete('/api/admin/users/:id', async (req, res) => {
-    if (!req.isAuthenticated()) {
+    if (!req.session || !req.session.user) {
       return res.status(401).json({ message: "You must be logged in" });
     }
+    req.user = req.session.user;
     
     if (req.user.email !== 'findmyhelper2025@gmail.com') {
       return res.status(403).json({ message: 'Admin access required' });
@@ -1119,9 +1166,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Notification endpoints
   app.get("/api/notifications", async (req, res) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ message: "You must be logged in to view notifications" });
+    if (!req.session || !req.session.user) {
+      return res.status(401).json({ message: "You must be logged in" });
     }
+    req.user = req.session.user;
     
     try {
       const notifications = await storage.getNotifications(req.user.id);
@@ -1132,9 +1180,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.get("/api/notifications/unread", async (req, res) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ message: "You must be logged in to view notifications" });
+    if (!req.session || !req.session.user) {
+      return res.status(401).json({ message: "You must be logged in" });
     }
+    req.user = req.session.user;
     
     try {
       const notifications = await storage.getUnreadNotifications(req.user.id);
@@ -1145,9 +1194,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.patch("/api/notifications/:id/read", async (req, res) => {
-    if (!req.isAuthenticated()) {
+    if (!req.session || !req.session.user) {
       return res.status(401).json({ message: "You must be logged in" });
     }
+    req.user = req.session.user;
     
     try {
       const success = await storage.markNotificationAsRead(parseInt(req.params.id));
@@ -1161,9 +1211,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.patch("/api/notifications/read-all", async (req, res) => {
-    if (!req.isAuthenticated()) {
+    if (!req.session || !req.session.user) {
       return res.status(401).json({ message: "You must be logged in" });
     }
+    req.user = req.session.user;
     
     try {
       await storage.markAllNotificationsAsRead(req.user.id);
@@ -1186,9 +1237,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Test user info endpoint 
   app.get("/api/test/user", async (req, res) => {
-    if (!req.isAuthenticated()) {
+    if (!req.session || !req.session.user) {
       return res.status(401).json({ message: "You must be logged in" });
     }
+    req.user = req.session.user;
     res.json({ 
       debug: true, 
       userId: req.user?.id,
@@ -1200,13 +1252,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get current user's service provider profile
   app.get("/api/providers/me", async (req, res) => {
     console.log('=== /api/providers/me route hit ===');
-    console.log('req.isAuthenticated():', req.isAuthenticated());
+    console.log('(req.session && req.session.user):', (req.session && req.session.user));
     console.log('req.user:', req.user);
     
-    if (!req.isAuthenticated()) {
-      console.log('Authentication failed');
+    if (!req.session || !req.session.user) {
       return res.status(401).json({ message: "You must be logged in" });
     }
+    req.user = req.session.user;
     
     try {
       console.log('Fetching provider for user ID:', req.user.id);
@@ -1250,9 +1302,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Update current user's service provider profile
   app.put("/api/providers/me", async (req, res) => {
-    if (!req.isAuthenticated()) {
+    if (!req.session || !req.session.user) {
       return res.status(401).json({ message: "You must be logged in" });
     }
+    req.user = req.session.user;
     
     try {
       const { categoryId, hourlyRate, bio, experience } = req.body;
@@ -1361,9 +1414,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Enhanced task creation with location-based notifications
   app.post("/api/tasks", async (req, res) => {
-    if (!req.isAuthenticated()) {
+    if (!req.session || !req.session.user) {
       return res.status(401).json({ message: "You must be logged in to create a task" });
     }
+    req.user = req.session.user;
     
     try {
       const taskData = insertTaskSchema.parse({
@@ -1442,9 +1496,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Enhanced service request handling with call center workflow
   app.post("/api/service-requests", async (req, res) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ message: "You must be logged in to create a service request" });
+    if (!req.session || !req.session.user) {
+      return res.status(401).json({ message: "You must be logged in" });
     }
+    req.user = req.session.user;
     
     try {
       const requestData = insertServiceRequestSchema.parse({
@@ -1501,9 +1556,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Admin/Payment Approver middleware
   const requirePaymentApprover = (req: any, res: Response, next: NextFunction) => {
-    if (!req.isAuthenticated()) {
+    if (!req.session || !req.session.user) {
       return res.status(401).json({ message: "You must be logged in" });
     }
+    req.user = req.session.user;
     if (req.user.role !== userRoles.PAYMENT_APPROVER && req.user.role !== userRoles.ADMIN) {
       return res.status(403).json({ message: "Payment approver access required" });
     }
@@ -1512,9 +1568,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Create payment intent for service request
   app.post("/api/payments/create-intent", async (req, res) => {
-    if (!req.isAuthenticated()) {
+    if (!req.session || !req.session.user) {
       return res.status(401).json({ message: "You must be logged in" });
     }
+    req.user = req.session.user;
 
     try {
       const { serviceRequestId, amount } = req.body;
@@ -1591,9 +1648,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Confirm payment and hold in escrow
   app.post("/api/payments/confirm", async (req, res) => {
-    if (!req.isAuthenticated()) {
+    if (!req.session || !req.session.user) {
       return res.status(401).json({ message: "You must be logged in" });
     }
+    req.user = req.session.user;
 
     try {
       const { paymentId } = req.body;
@@ -1632,9 +1690,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Provider submits work completion photos
   app.post("/api/payments/submit-work", async (req, res) => {
-    if (!req.isAuthenticated()) {
+    if (!req.session || !req.session.user) {
       return res.status(401).json({ message: "You must be logged in" });
     }
+    req.user = req.session.user;
 
     try {
       const { serviceRequestId, photos } = req.body;
@@ -1860,9 +1919,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Provider bank account management
   app.post("/api/payments/bank-account", async (req, res) => {
-    if (!req.isAuthenticated()) {
+    if (!req.session || !req.session.user) {
       return res.status(401).json({ message: "You must be logged in" });
     }
+    req.user = req.session.user;
 
     try {
       const provider = await storage.getServiceProviderByUserId(req.user.id);
@@ -1913,9 +1973,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Get provider bank account
   app.get("/api/payments/bank-account", async (req, res) => {
-    if (!req.isAuthenticated()) {
+    if (!req.session || !req.session.user) {
       return res.status(401).json({ message: "You must be logged in" });
     }
+    req.user = req.session.user;
 
     try {
       const provider = await storage.getServiceProviderByUserId(req.user.id);
@@ -1948,9 +2009,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Create a work order (buyers post jobs)
   app.post("/api/work-orders", async (req, res) => {
-    if (!req.isAuthenticated()) {
+    if (!req.session || !req.session.user) {
       return res.status(401).json({ message: "You must be logged in" });
     }
+    req.user = req.session.user;
 
     try {
       const workOrderData = insertWorkOrderSchema.parse({
@@ -1999,9 +2061,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Get work orders for buyers
   app.get("/api/work-orders/client", async (req, res) => {
-    if (!req.isAuthenticated()) {
+    if (!req.session || !req.session.user) {
       return res.status(401).json({ message: "You must be logged in" });
     }
+    req.user = req.session.user;
 
     try {
       const workOrders = await storage.getWorkOrdersByClient(req.user!.id);
@@ -2013,9 +2076,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Get available work orders for providers (privacy-protected)
   app.get("/api/work-orders/available", async (req, res) => {
-    if (!req.isAuthenticated()) {
+    if (!req.session || !req.session.user) {
       return res.status(401).json({ message: "You must be logged in" });
     }
+    req.user = req.session.user;
 
     try {
       const provider = await storage.getServiceProviderByUserId(req.user!.id);
@@ -2087,9 +2151,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Get specific work order with bids
   app.get("/api/work-orders/:id", async (req, res) => {
-    if (!req.isAuthenticated()) {
+    if (!req.session || !req.session.user) {
       return res.status(401).json({ message: "You must be logged in" });
     }
+    req.user = req.session.user;
 
     try {
       const workOrderId = parseInt(req.params.id);
@@ -2123,9 +2188,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Submit a bid on a work order
   app.post("/api/work-orders/:id/bids", async (req, res) => {
-    if (!req.isAuthenticated()) {
+    if (!req.session || !req.session.user) {
       return res.status(401).json({ message: "You must be logged in" });
     }
+    req.user = req.session.user;
 
     try {
       const workOrderId = parseInt(req.params.id);
@@ -2172,9 +2238,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Get bids for a work order (client view)
   app.get("/api/work-orders/:id/bids", async (req, res) => {
-    if (!req.isAuthenticated()) {
+    if (!req.session || !req.session.user) {
       return res.status(401).json({ message: "You must be logged in" });
     }
+    req.user = req.session.user;
 
     try {
       const workOrderId = parseInt(req.params.id);
@@ -2198,9 +2265,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Provider directly accepts work order (no bidding required)
   app.post("/api/work-orders/:id/accept", async (req, res) => {
-    if (!req.isAuthenticated()) {
+    if (!req.session || !req.session.user) {
       return res.status(401).json({ message: "You must be logged in" });
     }
+    req.user = req.session.user;
 
     try {
       const workOrderId = parseInt(req.params.id);
@@ -2276,7 +2344,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Call center approval endpoint - Release full client details to provider
   app.post("/api/call-center/assignments/:assignmentId/approve", async (req, res) => {
-    if (!req.isAuthenticated() || !['admin', 'call_center'].includes(req.user!.role)) {
+    if (!(req.session && req.session.user) || !['admin', 'call_center'].includes(req.user!.role)) {
       return res.status(403).json({ message: "Access denied. Call center staff only." });
     }
 
@@ -2348,9 +2416,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Accept a bid (assign work order to provider) - Legacy bidding system
   app.post("/api/work-orders/:workOrderId/bids/:bidId/accept", async (req, res) => {
-    if (!req.isAuthenticated()) {
+    if (!req.session || !req.session.user) {
       return res.status(401).json({ message: "You must be logged in" });
     }
+    req.user = req.session.user;
 
     try {
       const workOrderId = parseInt(req.params.workOrderId);
@@ -2424,9 +2493,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Add provider skill
   app.post("/api/provider/skills", async (req, res) => {
-    if (!req.isAuthenticated()) {
+    if (!req.session || !req.session.user) {
       return res.status(401).json({ message: "You must be logged in" });
     }
+    req.user = req.session.user;
 
     try {
       const provider = await storage.getServiceProviderByUserId(req.user!.id);
@@ -2459,9 +2529,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Add provider equipment
   app.post("/api/provider/equipment", async (req, res) => {
-    if (!req.isAuthenticated()) {
+    if (!req.session || !req.session.user) {
       return res.status(401).json({ message: "You must be logged in" });
     }
+    req.user = req.session.user;
 
     try {
       const provider = await storage.getServiceProviderByUserId(req.user!.id);
@@ -2494,9 +2565,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Get provider's active work orders
   app.get("/api/provider/work-orders", async (req, res) => {
-    if (!req.isAuthenticated()) {
+    if (!req.session || !req.session.user) {
       return res.status(401).json({ message: "You must be logged in" });
     }
+    req.user = req.session.user;
 
     try {
       const provider = await storage.getServiceProviderByUserId(req.user!.id);
@@ -2513,9 +2585,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Update work order status (start, complete, etc.)
   app.patch("/api/work-orders/:id/status", async (req, res) => {
-    if (!req.isAuthenticated()) {
+    if (!req.session || !req.session.user) {
       return res.status(401).json({ message: "You must be logged in" });
     }
+    req.user = req.session.user;
 
     try {
       const workOrderId = parseInt(req.params.id);
