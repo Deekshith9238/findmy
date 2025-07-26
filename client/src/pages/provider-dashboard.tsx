@@ -92,28 +92,23 @@ export default function ProviderDashboard() {
       workOrder.client.id !== user?.id
   );
 
-  // Mutation for submitting bids (FieldNation functionality)
-  const submitBidMutation = useMutation({
-    mutationFn: async (data: { workOrderId: number; bidAmount: number; proposalMessage: string }) => {
-      return apiRequest("POST", `/api/work-orders/${data.workOrderId}/bids`, {
-        bidAmount: data.bidAmount,
-        proposalMessage: data.proposalMessage,
-        estimatedCompletionDays: 1
-      });
+  // Mutation for accepting work orders directly (no bidding)
+  const acceptWorkMutation = useMutation({
+    mutationFn: async (workOrderId: number) => {
+      return apiRequest("POST", `/api/work-orders/${workOrderId}/accept`, {});
     },
     onSuccess: () => {
       toast({
-        title: "Bid Submitted Successfully",
-        description: "Your bid has been submitted to the client for review."
+        title: "Work Order Accepted",
+        description: "You have successfully accepted this work order. The client will be notified."
       });
       queryClient.invalidateQueries({ queryKey: ["/api/work-orders/available"] });
       queryClient.invalidateQueries({ queryKey: ["/api/provider/work-orders"] });
-      setTaskDialogOpen(false);
     },
     onError: (error: any) => {
       toast({
-        title: "Failed to Submit Bid",
-        description: error.message || "An error occurred while submitting your bid.",
+        title: "Failed to Accept Work",
+        description: error.message || "An error occurred while accepting the work order.",
         variant: "destructive",
       });
     },

@@ -2011,7 +2011,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Accept a bid (assign work order to provider)
+  // Provider directly accepts work order (no bidding required)
+  app.post("/api/work-orders/:id/accept", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+
+    try {
+      const workOrderId = parseInt(req.params.id);
+      const provider = await storage.getServiceProviderByUserId(req.user!.id);
+      
+      if (!provider) {
+        return res.status(404).json({ message: "Provider profile not found" });
+      }
+
+      const workOrder = await storage.getWorkOrder(workOrderId);
+      if (!workOrder) {
+        return res.status(404).json({ message: "Work order not found" });
+      }
+
+      if (workOrder.status !== 'open') {
+        return res.status(400).json({ message: "Work order is no longer available" });
+      }
+
+      if (workOrder.assignedProviderId) {
+        return res.status(400).json({ message: "Work order already assigned" });
+      }
+
+      // Assign work order directly to provider
+      await storage.updateWorkOrder(workOrderId, {
+        assignedProviderId: provider.id,
+        status: 'assigned'
+      });
+
+      // Notify client about work acceptance
+      const notification = await storage.createNotification({
+        userId: workOrder.clientId,
+        type: 'work_accepted',
+        title: 'Provider Accepted Your Work Order',
+        message: `${provider.user.firstName} ${provider.user.lastName} has accepted your work order "${workOrder.title}"`,
+        data: JSON.stringify({ workOrderId, providerId: provider.id })
+      });
+      
+      await sendNotificationToUser(workOrder.clientId, notification);
+
+      res.json({ message: "Work order accepted successfully", workOrderId });
+    } catch (error) {
+      console.error('Work order acceptance error:', error);
+      res.status(500).json({ message: "Failed to accept work order" });
+    }
+  });
+
+  // Accept a bid (assign work order to provider) - Legacy bidding system
   app.post("/api/work-orders/:workOrderId/bids/:bidId/accept", async (req, res) => {
     if (!req.isAuthenticated()) {
       return res.status(401).json({ message: "You must be logged in" });
