@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, CheckCircle, Clock, X, Briefcase, FileText } from "lucide-react";
+import { Loader2, CheckCircle, Clock, X, Briefcase, FileText, CreditCard } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -22,6 +22,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import BankAccountSetup from "@/components/BankAccountSetup";
 
 // Task request schema
 const taskRequestSchema = z.object({
@@ -254,6 +255,10 @@ export default function ProviderDashboard() {
                 <Briefcase className="mr-2 h-4 w-4" />
                 Service Requests
               </TabsTrigger>
+              <TabsTrigger value="bank-setup" className="flex-1">
+                <CreditCard className="mr-2 h-4 w-4" />
+                Bank Account
+              </TabsTrigger>
             </TabsList>
             
             <TabsContent value="available-tasks">
@@ -446,6 +451,20 @@ export default function ProviderDashboard() {
                   </CardContent>
                 </Card>
               )}
+            </TabsContent>
+            
+            <TabsContent value="bank-setup">
+              <Card>
+                <CardContent className="p-6">
+                  <div className="mb-6">
+                    <h3 className="text-xl font-semibold mb-2">Bank Account Setup</h3>
+                    <p className="text-muted-foreground">
+                      Set up your bank account to receive payments from completed services. This is required for payment processing.
+                    </p>
+                  </div>
+                  <BankAccountSetup />
+                </CardContent>
+              </Card>
             </TabsContent>
           </Tabs>
         </div>

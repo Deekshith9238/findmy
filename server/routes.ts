@@ -12,7 +12,7 @@ import {
   insertServiceRequestSchema,
   insertReviewSchema,
   insertUserSchema,
-  insertUserWithBankSchema,
+
   insertPaymentApproverSchema,
   insertNotificationSchema,
   insertEscrowPaymentSchema,

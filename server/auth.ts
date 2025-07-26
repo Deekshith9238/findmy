@@ -7,7 +7,7 @@ import { promisify } from "util";
 import { storage } from "./storage";
 import { User as SelectUser } from "@shared/schema";
 import { z } from "zod";
-import { insertUserSchema, insertUserWithBankSchema } from "@shared/schema";
+import { insertUserSchema } from "@shared/schema";
 
 declare global {
   namespace Express {
@@ -41,8 +41,8 @@ async function comparePasswords(supplied: string, stored: string) {
 }
 
 // Schema for user registration (backend only - confirmPassword validation happens on frontend)
-// Now requires bank details for all users (both clients and service providers)
-const registerSchema = insertUserWithBankSchema.extend({
+// Bank details are no longer required during registration
+const registerSchema = insertUserSchema.extend({
   isServiceProvider: z.boolean(),
   // Service provider fields (optional, validated separately)
   categoryId: z.number().optional(),

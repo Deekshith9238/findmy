@@ -580,15 +580,6 @@ export const insertUserSchema = createInsertSchema(users).omit({
   updatedAt: true
 });
 
-// Extended user schema with mandatory bank details
-export const insertUserWithBankSchema = insertUserSchema.extend({
-  bankAccountHolderName: z.string().min(1, "Bank account holder name is required"),
-  bankName: z.string().min(1, "Bank name is required"),
-  bankAccountNumber: z.string().min(4, "Bank account number is required"),
-  bankRoutingNumber: z.string().length(9, "Routing number must be 9 digits"),
-  bankAccountType: z.enum(['checking', 'savings']),
-});
-
 // Payment approver schema - can only be created by admin (no bank details required)
 export const insertPaymentApproverSchema = insertUserSchema.extend({
   role: z.literal(userRoles.PAYMENT_APPROVER),
@@ -685,7 +676,6 @@ export const insertProviderBankAccountSchema = createInsertSchema(providerBankAc
 
 // Types
 export type InsertUser = z.infer<typeof insertUserSchema>;
-export type InsertUserWithBank = z.infer<typeof insertUserWithBankSchema>;
 export type InsertPaymentApprover = z.infer<typeof insertPaymentApproverSchema>;
 export type User = typeof users.$inferSelect;
 
