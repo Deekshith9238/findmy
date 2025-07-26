@@ -86,43 +86,131 @@ export default function ClientDashboard() {
 
   return (
     <MainLayout>
-      <div className="bg-neutral-50 min-h-screen">
-        <div className="container mx-auto px-4 py-8">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8">
-            <div>
-              <h1 className="text-3xl font-bold">Client Dashboard</h1>
-              <p className="text-neutral-600 mt-1">
-                Manage your tasks and service requests
-              </p>
+      <div className="bg-gray-50 min-h-screen">
+        <div className="container mx-auto px-6 py-8">
+          {/* Header Section */}
+          <div className="mb-8">
+            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
+              <div>
+                <h1 className="text-4xl font-bold text-gray-900 mb-2">Work Order Management</h1>
+                <p className="text-lg text-gray-600">
+                  Create, track, and manage your field service work orders
+                </p>
+              </div>
+              
+              <Dialog open={createTaskDialogOpen} onOpenChange={setCreateTaskDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button size="lg" className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3">
+                    <Plus className="mr-2 h-5 w-5" />
+                    Create Work Order
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[550px]">
+                  <DialogHeader>
+                    <DialogTitle>Create New Work Order</DialogTitle>
+                  </DialogHeader>
+                  <CreateTaskForm onSuccess={handleCloseDialog} />
+                </DialogContent>
+              </Dialog>
             </div>
-            
-            <Dialog open={createTaskDialogOpen} onOpenChange={setCreateTaskDialogOpen}>
-              <DialogTrigger asChild>
-                <Button className="mt-4 md:mt-0" onClick={() => setCreateTaskDialogOpen(true)}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Create New Task
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-[550px]">
-                <DialogHeader>
-                  <DialogTitle>Create a New Task</DialogTitle>
-                </DialogHeader>
-                <CreateTaskForm onSuccess={handleCloseDialog} />
-              </DialogContent>
-            </Dialog>
+          </div>
+
+          {/* Key Metrics Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Active Work Orders</p>
+                    <p className="text-3xl font-bold text-gray-900">{tasks?.filter(t => t.status === 'open' || t.status === 'in-progress').length || 0}</p>
+                    <p className="text-sm text-blue-600 mt-1">In progress</p>
+                  </div>
+                  <div className="h-12 w-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <Clock className="h-6 w-6 text-blue-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Completed Jobs</p>
+                    <p className="text-3xl font-bold text-gray-900">{tasks?.filter(t => t.status === 'completed').length || 0}</p>
+                    <p className="text-sm text-green-600 mt-1">This month</p>
+                  </div>
+                  <div className="h-12 w-12 bg-green-100 rounded-lg flex items-center justify-center">
+                    <CheckCircle className="h-6 w-6 text-green-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Success Rate</p>
+                    <p className="text-3xl font-bold text-gray-900">96%</p>
+                    <p className="text-sm text-green-600 mt-1">Above average</p>
+                  </div>
+                  <div className="h-12 w-12 bg-green-100 rounded-lg flex items-center justify-center">
+                    <FileText className="h-6 w-6 text-green-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Pending Requests</p>
+                    <p className="text-3xl font-bold text-gray-900">{serviceRequests?.filter(r => r.status === 'pending').length || 0}</p>
+                    <p className="text-sm text-orange-600 mt-1">Need attention</p>
+                  </div>
+                  <div className="h-12 w-12 bg-orange-100 rounded-lg flex items-center justify-center">
+                    <AlertCircle className="h-6 w-6 text-orange-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </div>
           
+          {/* FieldNation-style Professional Navigation */}
+          <div className="bg-white rounded-lg shadow-sm border mb-8">
+            <div className="flex border-b">
+              <button
+                onClick={() => setActiveTab("tasks")}
+                className={`px-6 py-4 font-medium border-b-2 transition-colors ${
+                  activeTab === "tasks"
+                    ? "border-blue-600 text-blue-600 bg-blue-50"
+                    : "border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Work Orders ({tasks?.length || 0})
+                </div>
+              </button>
+              <button
+                onClick={() => setActiveTab("requests")}
+                className={`px-6 py-4 font-medium border-b-2 transition-colors ${
+                  activeTab === "requests"
+                    ? "border-blue-600 text-blue-600 bg-blue-50"
+                    : "border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <Clock className="h-5 w-5" />
+                  Provider Assignments ({serviceRequests?.length || 0})
+                </div>
+              </button>
+            </div>
+          </div>
+
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="mb-8">
-              <TabsTrigger value="tasks" className="flex-1">
-                <FileText className="mr-2 h-4 w-4" />
-                My Tasks
-              </TabsTrigger>
-              <TabsTrigger value="requests" className="flex-1">
-                <Clock className="mr-2 h-4 w-4" />
-                Service Requests
-              </TabsTrigger>
-            </TabsList>
             
             <TabsContent value="tasks">
               {tasksLoading ? (

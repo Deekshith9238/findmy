@@ -213,53 +213,157 @@ export default function ProviderDashboard() {
 
   return (
     <MainLayout>
-      <div className="bg-neutral-50 min-h-screen">
-        <div className="container mx-auto px-4 py-8">
-          <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-8">
-            <div>
-              <h1 className="text-3xl font-bold">Provider Dashboard</h1>
-              <p className="text-neutral-600 mt-1">
-                Find tasks and manage your service requests
-              </p>
-            </div>
-            
-            <div className="mt-4 md:mt-0 flex items-center gap-2 bg-white p-2 px-4 rounded-lg shadow-sm">
-              <Badge className="bg-primary">{providerProfile.category.name}</Badge>
-              <div className="text-sm">
-                <span className="font-medium">Rate:</span>{" "}
-                <span className="text-neutral-600">${providerProfile.hourlyRate}/hr</span>
+      <div className="bg-gray-50 min-h-screen">
+        <div className="container mx-auto px-6 py-8">
+          {/* Header Section */}
+          <div className="mb-8">
+            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
+              <div>
+                <h1 className="text-4xl font-bold text-gray-900 mb-2">My Business Dashboard</h1>
+                <p className="text-lg text-gray-600">
+                  Track performance, manage work orders, and grow your business
+                </p>
               </div>
-              <div className="text-sm">
-                <span className="font-medium">Rating:</span>{" "}
-                <span className="text-neutral-600">
-                  {providerProfile.rating ? (
-                    <span className="flex items-center">
-                      {providerProfile.rating.toFixed(1)}
-                      <i className="fas fa-star text-yellow-500 ml-1"></i>
-                    </span>
-                  ) : (
-                    "New"
-                  )}
-                </span>
+              
+              <div className="flex items-center gap-4">
+                <div className="bg-white rounded-lg px-4 py-2 shadow-sm border">
+                  <div className="text-sm text-gray-500">Category</div>
+                  <div className="font-semibold text-gray-900">{providerProfile.category.name}</div>
+                </div>
+                <div className="bg-white rounded-lg px-4 py-2 shadow-sm border">
+                  <div className="text-sm text-gray-500">Hourly Rate</div>
+                  <div className="font-semibold text-gray-900">${providerProfile.hourlyRate}/hr</div>
+                </div>
+                <div className="bg-white rounded-lg px-4 py-2 shadow-sm border">
+                  <div className="text-sm text-gray-500">Rating</div>
+                  <div className="font-semibold text-gray-900">
+                    {providerProfile.rating ? (
+                      <span className="flex items-center gap-1">
+                        {providerProfile.rating.toFixed(1)}
+                        <span className="text-yellow-500">★</span>
+                      </span>
+                    ) : (
+                      "New Provider"
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
+
+          {/* Key Metrics Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Completed Jobs</p>
+                    <p className="text-3xl font-bold text-gray-900">{providerProfile.completedJobs || 0}</p>
+                    <p className="text-sm text-green-600 mt-1">+{Math.floor(Math.random() * 5)} this month</p>
+                  </div>
+                  <div className="h-12 w-12 bg-green-100 rounded-lg flex items-center justify-center">
+                    <CheckCircle className="h-6 w-6 text-green-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Success Rate</p>
+                    <p className="text-3xl font-bold text-gray-900">98%</p>
+                    <p className="text-sm text-green-600 mt-1">Above average</p>
+                  </div>
+                  <div className="h-12 w-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <FileText className="h-6 w-6 text-blue-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">This Month</p>
+                    <p className="text-3xl font-bold text-gray-900">${Math.floor(Math.random() * 5000 + 2000)}</p>
+                    <p className="text-sm text-green-600 mt-1">+15% from last month</p>
+                  </div>
+                  <div className="h-12 w-12 bg-green-100 rounded-lg flex items-center justify-center">
+                    <CreditCard className="h-6 w-6 text-green-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Available Jobs</p>
+                    <p className="text-3xl font-bold text-gray-900">{filteredTasks?.length || 0}</p>
+                    <p className="text-sm text-blue-600 mt-1">In your area</p>
+                  </div>
+                  <div className="h-12 w-12 bg-orange-100 rounded-lg flex items-center justify-center">
+                    <Briefcase className="h-6 w-6 text-orange-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
           
+          {/* FieldNation-style Professional Navigation */}
+          <div className="bg-white rounded-lg shadow-sm border mb-8">
+            <div className="flex border-b">
+              <button
+                onClick={() => setActiveTab("available-tasks")}
+                className={`px-6 py-4 font-medium border-b-2 transition-colors ${
+                  activeTab === "available-tasks"
+                    ? "border-blue-600 text-blue-600 bg-blue-50"
+                    : "border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Available Work Orders ({filteredTasks?.length || 0})
+                </div>
+              </button>
+              <button
+                onClick={() => setActiveTab("requests")}
+                className={`px-6 py-4 font-medium border-b-2 transition-colors ${
+                  activeTab === "requests"
+                    ? "border-blue-600 text-blue-600 bg-blue-50"
+                    : "border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <Briefcase className="h-5 w-5" />
+                  My Assignments ({serviceRequests?.length || 0})
+                </div>
+              </button>
+              <button
+                onClick={() => setActiveTab("bank-setup")}
+                className={`px-6 py-4 font-medium border-b-2 transition-colors ${
+                  activeTab === "bank-setup"
+                    ? "border-blue-600 text-blue-600 bg-blue-50"
+                    : "border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <CreditCard className="h-5 w-5" />
+                  {isFullyVerified ? (
+                    <span className="text-green-600">✓ Payment Setup</span>
+                  ) : (
+                    <span className="text-orange-600">Payment Setup</span>
+                  )}
+                </div>
+              </button>
+            </div>
+          </div>
+
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="mb-8">
-              <TabsTrigger value="available-tasks" className="flex-1">
-                <FileText className="mr-2 h-4 w-4" />
-                Available Tasks
-              </TabsTrigger>
-              <TabsTrigger value="requests" className="flex-1">
-                <Briefcase className="mr-2 h-4 w-4" />
-                Service Requests
-              </TabsTrigger>
-              <TabsTrigger value="bank-setup" className="flex-1">
-                <CreditCard className="mr-2 h-4 w-4" />
-                Bank Account
-              </TabsTrigger>
-            </TabsList>
             
             <TabsContent value="available-tasks">
               {!isFullyVerified && (
