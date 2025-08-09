@@ -58,7 +58,7 @@ app.use((req, res, next) => {
   }
 
   // Use port 4000 for backend API
-  const port = 4000;
+  const port = 3000;
   server.listen({
     port,
     host: "0.0.0.0",
