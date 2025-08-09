@@ -727,9 +727,7 @@ export class DatabaseStorage implements IStorage {
         isEmailVerified: true
       });
       
-      console.log('✅ Admin user created successfully');
     } else {
-      console.log('✅ Admin user already exists');
     }
   }
 
@@ -803,14 +801,12 @@ export class DatabaseStorage implements IStorage {
 
   async createServiceProvider(provider: InsertServiceProvider): Promise<ServiceProvider> {
     try {
-      console.log('DatabaseStorage: Creating service provider with data:', provider);
       const [newProvider] = await db.insert(serviceProviders).values({
         ...provider,
         rating: 0,
         completedJobs: 0
       }).returning();
       
-      console.log('DatabaseStorage: Service provider created successfully:', newProvider);
       return newProvider;
     } catch (error) {
       console.error('DatabaseStorage: Error creating service provider:', error);
@@ -825,9 +821,7 @@ export class DatabaseStorage implements IStorage {
 
   async getServiceProviderByUserId(userId: number): Promise<ServiceProvider | undefined> {
     try {
-      console.log('DatabaseStorage: Querying provider for userId:', userId);
       const [provider] = await db.select().from(serviceProviders).where(eq(serviceProviders.userId, userId));
-      console.log('DatabaseStorage: Provider result:', provider);
       return provider;
     } catch (error) {
       console.error('DatabaseStorage: Error querying provider:', error);
@@ -875,9 +869,7 @@ export class DatabaseStorage implements IStorage {
 
   async createTask(task: InsertTask): Promise<Task> {
     try {
-      console.log('DatabaseStorage: Creating task with data:', task);
       const [newTask] = await db.insert(tasks).values(task).returning();
-      console.log('DatabaseStorage: Task created successfully:', newTask);
       return newTask;
     } catch (error) {
       console.error('DatabaseStorage: Error creating task:', error);
@@ -896,9 +888,7 @@ export class DatabaseStorage implements IStorage {
 
   async getTasksByClient(clientId: number): Promise<Task[]> {
     try {
-      console.log('DatabaseStorage: Getting tasks for client:', clientId);
       const clientTasks = await db.select().from(tasks).where(eq(tasks.clientId, clientId));
-      console.log('DatabaseStorage: Found tasks:', clientTasks.length);
       return clientTasks;
     } catch (error) {
       console.error('DatabaseStorage: Error getting tasks for client:', error);

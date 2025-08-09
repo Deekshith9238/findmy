@@ -62,7 +62,6 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
       const token = await registerForPushNotifications();
       if (token && user) {
         // Send token to backend (you'll need to add this endpoint)
-        console.log('Push notification token:', token);
       }
     } catch (error) {
       console.error('Failed to setup push notifications:', error);
@@ -86,7 +85,6 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
 
       // Add projectId to fix the deprecation warning
       const token = (await Notifications.getExpoPushTokenAsync()).data;
-      console.log('Expo push token:', token);
       return token;
     } catch (error) {
       console.error('Error getting push notification token:', error);

@@ -46,24 +46,12 @@ export default function ServiceVerifierDashboard() {
     queryKey: ['/api/providers/recently-verified'],
     enabled: !!user && user.role === 'service_verifier',
     onSuccess: (data) => {
-      console.log('🔍 Frontend received recently verified providers:', data);
-      console.log('📊 Data type:', typeof data);
-      console.log('📊 Is array:', Array.isArray(data));
-      console.log('📊 Length:', data ? data.length : 'null/undefined');
       if (data && data.length > 0) {
-        console.log('📋 First recently verified provider:', data[0]);
       }
     },
     onError: (error) => {
       console.error('❌ Error fetching recently verified providers:', error);
     }
-  });
-
-  console.log('🔄 Recently verified query state:', {
-    isLoading: verifiedLoading,
-    hasData: !!recentlyVerified,
-    dataLength: recentlyVerified ? recentlyVerified.length : 0,
-    error: recentError
   });
 
   // Fetch verification statistics

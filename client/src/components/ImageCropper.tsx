@@ -25,10 +25,8 @@ export default function ImageCropper({
   const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
   const [isCropping, setIsCropping] = useState(false);
 
-  console.log('ImageCropper render:', { isOpen, imageSrc: !!imageSrc });
 
   const handleCropComplete = useCallback((croppedArea: any, croppedAreaPixels: any) => {
-    console.log('Crop complete callback:', { croppedArea, croppedAreaPixels });
     setCroppedAreaPixels(croppedAreaPixels);
   }, []);
 

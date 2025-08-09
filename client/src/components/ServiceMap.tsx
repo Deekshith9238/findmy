@@ -65,7 +65,6 @@ export default function ServiceMap({
           });
         },
         (error) => {
-          console.log('Geolocation error:', error);
           // Default to NYC center if geolocation fails
           setUserLocation({ lat: 40.7128, lng: -74.0060 });
         }

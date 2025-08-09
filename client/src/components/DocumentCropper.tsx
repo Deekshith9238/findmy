@@ -63,10 +63,8 @@ export default function DocumentCropper({
   const aspectRatio = getAspectRatio(documentType);
   const documentTypeLabel = getDocumentTypeLabel(documentType);
 
-  console.log('DocumentCropper render:', { isOpen, imageSrc: !!imageSrc, documentType, aspectRatio });
 
   const handleCropComplete = useCallback((croppedArea: any, croppedAreaPixels: any) => {
-    console.log('Document crop complete callback:', { croppedArea, croppedAreaPixels });
     setCroppedAreaPixels(croppedAreaPixels);
   }, []);
 

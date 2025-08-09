@@ -13,7 +13,6 @@ export async function sendOTPEmailToUser(email: string, otp: string, purpose: st
     const success = await sendOTPEmail(email, otp, purpose);
     
     if (success) {
-      console.log(`📧 OTP sent successfully to ${email}: ${otp} (Purpose: ${purpose})`);
     } else {
       console.error(`❌ Failed to send OTP to ${email}`);
     }

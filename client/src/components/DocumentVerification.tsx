@@ -139,7 +139,6 @@ export default function DocumentVerification({ providerId }: DocumentVerificatio
     const file = event.target.files?.[0];
     if (!file || !selectedType) return;
 
-    console.log('Document file selected:', file.name, file.size, file.type);
 
     try {
       // Validate file size
@@ -158,14 +157,12 @@ export default function DocumentVerification({ providerId }: DocumentVerificatio
       
       if (isImage) {
         // For images, show cropper
-        console.log('Image document selected, showing cropper');
         const imageDataUrl = await readFile(file);
         setSelectedImage(imageDataUrl);
         setSelectedFile(file);
         setShowCropper(true);
       } else {
         // For PDFs and other files, upload directly
-        console.log('Non-image document, uploading directly');
         uploadMutation.mutate({ file, documentType: selectedType });
       }
     } catch (error) {
@@ -207,7 +204,6 @@ export default function DocumentVerification({ providerId }: DocumentVerificatio
     const file = event.target.files?.[0];
     if (!file) return;
 
-    console.log('Reupload file selected:', file.name, file.size, file.type);
 
     // Check if file is an image
     if (file.type.startsWith('image/')) {

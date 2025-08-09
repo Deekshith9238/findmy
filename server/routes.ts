@@ -19,27 +19,18 @@ const sessionStore = new MemoryStore();
 // Add debugging to the session store methods
 const originalGet = sessionStore.get.bind(sessionStore);
 sessionStore.get = function(sessionId: string, callback: any) {
-  console.log('🔍 MemoryStore get:', sessionId);
   return originalGet(sessionId, (err: any, session: any) => {
-    console.log('🔍 MemoryStore get result:', {
-      sessionId,
-      error: err,
-      sessionFound: !!session,
-      sessionUser: session?.user?.id
-    });
     callback(err, session);
   });
 };
 
 const originalSet = sessionStore.set.bind(sessionStore);
 sessionStore.set = function(sessionId: string, session: any, callback: any) {
-  console.log('💾 MemoryStore set:', sessionId, 'user:', session.user?.id);
   return originalSet(sessionId, session, callback);
 };
 
 const originalDestroy = sessionStore.destroy.bind(sessionStore);
 sessionStore.destroy = function(sessionId: string, callback: any) {
-  console.log('🗑️ MemoryStore destroy:', sessionId);
   return originalDestroy(sessionId, callback);
 };
 
@@ -66,7 +57,6 @@ const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: numbe
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Initialize session middleware FIRST (critical for authentication)
-  console.log('🔧 Initializing session middleware with store:', sessionStore.constructor.name);
 
   // Add cookie-parser middleware before session middleware
   app.use(cookieParser());
@@ -89,23 +79,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     unset: 'keep'
   }));
   
-  console.log('✅ Session middleware initialized');
 
   // Add session debugging middleware
   app.use((req, res, next) => {
-    console.log('🔍 Request session info:', {
-      sessionId: req.sessionID,
-      hasSession: !!req.session,
-      hasUser: !!(req.session && req.session.user),
-      user: req.session?.user?.id,
-      cookie: req.headers.cookie ? 'Present' : 'Missing',
-      cookieValue: req.headers.cookie,
-      // Add more detailed cookie debugging
-      parsedCookies: req.cookies,
-      sessionCookie: req.cookies?.connect_sid || req.cookies?.['connect.sid'],
-      // Add debugging for session ID extraction
-      sessionIdFromCookie: req.cookies?.['connect.sid'] ? req.cookies['connect.sid'].split('.')[0].substring(2) : 'None'
-    });
     next();
   });
 
@@ -129,12 +105,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // User authentication status endpoint
   app.get('/api/user', async (req, res) => {
-    console.log('Session check:', {
-      hasSession: !!req.session,
-      hasUser: !!(req.session && req.session.user),
-      sessionId: req.sessionID,
-      user: req.session?.user
-    });
     
     if (req.session && req.session.user) {
       const user = await storage.getUser(req.session.user.id);
@@ -212,8 +182,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // If user is a service provider, create the provider profile
       if (role === 'service_provider') {
-        console.log('Creating service provider profile for user:', user.id);
-        console.log('Provider data:', { categoryId, hourlyRate, bio, yearsOfExperience, availability });
         
         if (!categoryId || !hourlyRate) {
           return res.status(400).json({ message: "Category and hourly rate are required for service providers" });
@@ -230,14 +198,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           completedJobs: 0,
           isVerified: false
         };
-
-        console.log('Provider data to create:', providerData);
         
         try {
           const createdProvider = await storage.createServiceProvider(providerData);
-          console.log('Provider profile created successfully:', createdProvider);
         } catch (providerError) {
-          console.error('Error creating provider profile:', providerError);
           // Don't fail the registration, just log the error
         }
       }
@@ -400,7 +364,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { email, password } = req.body;
       
-      console.log('Login attempt:', { email, passwordLength: password?.length });
+      
       
       if (!email || !password) {
         return res.status(400).json({ message: "Email and password are required" });
@@ -408,12 +372,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Check if user exists
       const user = await storage.getUserByEmail(email);
-      console.log('User lookup result:', { 
-        found: !!user, 
-        userId: user?.id, 
-        hasPassword: !!user?.password,
-        passwordLength: user?.password?.length 
-      });
       
       if (!user) {
         return res.status(401).json({ message: "Invalid credentials" });
@@ -421,11 +379,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Verify password
       const passwordValid = verifyPassword(password, user.password);
-      console.log('Password verification:', { 
-        passwordValid, 
-        inputPasswordLength: password.length,
-        storedPasswordLength: user.password.length 
-      });
       
       if (!passwordValid) {
         return res.status(401).json({ message: "Invalid credentials" });
@@ -450,12 +403,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.error('Session save error:', err);
           return res.status(500).json({ message: "Session save failed" });
         }
-        
-        console.log('Login session created:', {
-          sessionId: req.sessionID,
-          user: req.session.user,
-          cookie: req.session.cookie
-        });
         
         res.json({ 
           id: user.id, 
@@ -629,9 +576,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     req.user = req.session.user;
 
-    console.log('=== /api/providers/me route hit ===');
-    console.log('(req.session && req.session.user):', (req.session && req.session.user));
-    console.log('req.user:', req.user);
     
     if (!req.session || !req.session.user) {
       return res.status(401).json({ message: "You must be logged in" });
@@ -639,13 +583,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     req.user = req.session.user;
     
     try {
-      console.log('Fetching provider for user ID:', req.user.id);
       const result = await pool.query('SELECT * FROM service_providers WHERE user_id = $1', [req.user.id]);
-      console.log('Raw SQL result rows count:', result.rows.length);
-      console.log('Raw SQL result:', result.rows);
       
       if (result.rows.length === 0) {
-        console.log('No provider found for user ID:', req.user.id);
         return res.status(404).json({ message: "Service provider profile not found" });
       }
       
@@ -667,8 +607,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         createdAt: row.created_at,
         updatedAt: row.updated_at
       };
-      
-      console.log('Sending provider data:', provider);
+    
       res.json(provider);
     } catch (error) {
       const err = error as Error;
@@ -685,11 +624,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     req.user = req.session.user;
 
-    console.log('=== /api/providers/me PUT route hit ===');
-    console.log('User ID:', req.user.id);
-    console.log('User role:', req.user.role);
-    console.log('Request body:', req.body);
-
     if (!req.session || !req.session.user) {
       return res.status(401).json({ message: "You must be logged in" });
     }
@@ -703,16 +637,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Category, hourly rate, and bio are required" });
       }
       
-      console.log('Looking for service provider for user ID:', req.user.id);
       const serviceProvider = await storage.getServiceProviderByUserId(req.user.id);
-      console.log('Service provider found:', serviceProvider);
+      
       
       if (!serviceProvider) {
-        console.log('No service provider found for user ID:', req.user.id);
+        
         
         // Try to create a provider profile if it doesn't exist
         try {
-          console.log('Attempting to create provider profile for user:', req.user.id);
+          
           const newProviderData = {
             userId: req.user.id,
             categoryId: parseInt(categoryId),
@@ -726,7 +659,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           };
           
           const createdProvider = await storage.createServiceProvider(newProviderData);
-          console.log('Provider profile created successfully:', createdProvider);
           
           res.json(createdProvider);
           return;
@@ -743,7 +675,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         yearsOfExperience: experience ? parseInt(experience) : null
       });
       
-      console.log('Provider updated successfully:', updatedProvider);
       res.json(updatedProvider);
     } catch (error) {
       console.error('Error updating service provider profile:', error);
@@ -763,11 +694,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     
     try {
-      console.log('🔍 Fetching providers pending verification...');
+      
       
       // Step 1: Get all providers
       const providers = await storage.getServiceProviders();
-      console.log('📊 Total providers found:', providers.length);
+      
       
       // Step 2: Filter providers who have pending documents OR pending overall status
       const providersWithPendingDocs = [];
@@ -783,30 +714,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         if (hasPendingDocuments || isOverallPending) {
           providersWithPendingDocs.push(provider);
-          console.log(`📋 Provider ${provider.id} has pending documents or status: ${hasPendingDocuments ? 'pending docs' : ''} ${isOverallPending ? 'pending status' : ''}`);
+          
         }
       }
       
-      console.log('📋 Providers with pending documents/status found:', providersWithPendingDocs.length);
+      
       
       // Step 3: Get basic data for each provider with pending items
       const result = [];
       
       for (const provider of providersWithPendingDocs) {
         try {
-          console.log(`🔍 Processing provider ${provider.id}...`);
+          
           
           // Get user
           const user = await storage.getUser(provider.userId);
-          console.log(`👤 User for provider ${provider.id}:`, user ? 'Found' : 'Not found');
+          
           
           // Get category
           const category = await storage.getServiceCategory(provider.categoryId);
-          console.log(`📂 Category for provider ${provider.id}:`, category ? 'Found' : 'Not found');
+          
           
           // Get documents
           const documents = await storage.getServiceProviderDocuments(provider.id);
-          console.log(`📄 Documents for provider ${provider.id}:`, documents.length);
+          
           
           if (user) {
             result.push({
@@ -852,10 +783,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
               }))
             });
             
-            console.log(`✅ Successfully processed provider ${provider.id}`);
-          } else {
-            console.log(`❌ Skipping provider ${provider.id} - user not found`);
-          }
+            
+          } 
           
         } catch (error) {
           console.error(`❌ Error processing provider ${provider.id}:`, error);
@@ -863,7 +792,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      console.log(`📋 Returning ${result.length} processed providers`);
+      
       res.json(result);
       
     } catch (error) {
@@ -889,27 +818,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     
     try {
-      console.log('🔍 Fetching recently verified providers...');
+      
       
       // Get providers verified in the last 7 days
       const providers = await storage.getServiceProviders();
-      console.log('📋 Total providers found:', providers.length);
       
-      // Debug: Log all providers and their verification status
-      providers.forEach(p => {
-        console.log(`Provider ${p.id}: status=${p.verificationStatus}, verifiedAt=${p.verifiedAt}`);
-      });
+      
       
       const recentlyVerified = [];
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-      console.log('📅 Seven days ago:', sevenDaysAgo);
+      
       
       for (const provider of providers) {
         if (provider.verificationStatus === 'verified' && 
             provider.verifiedAt && 
             new Date(provider.verifiedAt) >= sevenDaysAgo) {
-          console.log(`✅ Found recently verified provider: ${provider.id}`);
+          
           try {
             const user = await storage.getUser(provider.userId);
             
@@ -934,7 +859,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      console.log(`📋 Returning ${recentlyVerified.length} recently verified providers`);
+      
       res.json(recentlyVerified);
     } catch (error) {
       console.error('❌ Error in recently verified endpoint:', error);
@@ -1641,19 +1566,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     try {
       const { profilePicture } = req.body;
-      console.log('Profile picture update request for user:', req.user.id);
-      console.log('Profile picture data length:', profilePicture ? profilePicture.length : 0);
+      
+      
       
       const updatedUser = await storage.updateUser(req.user.id, {
         profilePicture: profilePicture || null
       });
       
       if (!updatedUser) {
-        console.log('User not found during profile picture update:', req.user.id);
+      
         return res.status(404).json({ message: "User not found" });
       }
       
-      console.log('Profile picture updated successfully for user:', req.user.id);
+      
       res.json(updatedUser);
     } catch (err) {
       const error = err as Error;
@@ -1779,26 +1704,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const documentId = parseInt(req.params.documentId);
       const { documentUrl, originalName, verificationStatus, notes } = req.body;
 
-      console.log('🔄 Document reupload request:', {
-        documentId,
-        verificationStatus,
-        originalName,
-        hasNewUrl: !!documentUrl
-      });
 
       // Get the document to check ownership
       const document = await storage.getServiceProviderDocument(documentId);
       if (!document) {
-        console.log('❌ Document not found:', documentId);
+        
         return res.status(404).json({ message: "Document not found" });
       }
 
-      console.log('📄 Current document status:', document.verificationStatus);
+      
 
       // Check if user owns this document
       const provider = await storage.getServiceProvider(document.providerId);
       if (!provider || provider.userId !== req.user.id) {
-        console.log('❌ Access denied for document:', documentId);
+        
         return res.status(403).json({ message: "Access denied" });
       }
 
@@ -1809,12 +1728,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         notes,
         verifiedBy: null, // Clear previous verification
         verifiedAt: null
-      });
-
-      console.log('✅ Document updated successfully:', {
-        documentId,
-        newStatus: updatedDocument?.verificationStatus,
-        providerId: document.providerId
       });
 
       res.json(updatedDocument);
@@ -2346,9 +2259,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     req.user = req.session.user;
 
-    console.log('=== /api/providers/me route hit ===');
-    console.log('(req.session && req.session.user):', (req.session && req.session.user));
-    console.log('req.user:', req.user);
     
     if (!req.session || !req.session.user) {
       return res.status(401).json({ message: "You must be logged in" });
@@ -2356,13 +2266,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     req.user = req.session.user;
     
     try {
-      console.log('Fetching provider for user ID:', req.user.id);
+      
       const result = await pool.query('SELECT * FROM service_providers WHERE user_id = $1', [req.user.id]);
-      console.log('Raw SQL result rows count:', result.rows.length);
-      console.log('Raw SQL result:', result.rows);
+      
+      
       
       if (result.rows.length === 0) {
-        console.log('No provider found for user ID:', req.user.id);
+        
         return res.status(404).json({ message: "Service provider profile not found" });
       }
       
@@ -2385,7 +2295,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         updatedAt: row.updated_at
       };
       
-      console.log('Sending provider data:', provider);
+      
       res.json(provider);
     } catch (error) {
       const err = error as Error;
@@ -2402,11 +2312,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     req.user = req.session.user;
 
-    console.log('=== /api/providers/me PUT route hit ===');
-    console.log('User ID:', req.user.id);
-    console.log('User role:', req.user.role);
-    console.log('Request body:', req.body);
-
     if (!req.session || !req.session.user) {
       return res.status(401).json({ message: "You must be logged in" });
     }
@@ -2420,16 +2325,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Category, hourly rate, and bio are required" });
       }
       
-      console.log('Looking for service provider for user ID:', req.user.id);
+      
       const serviceProvider = await storage.getServiceProviderByUserId(req.user.id);
-      console.log('Service provider found:', serviceProvider);
+      
       
       if (!serviceProvider) {
-        console.log('No service provider found for user ID:', req.user.id);
+        
         
         // Try to create a provider profile if it doesn't exist
         try {
-          console.log('Attempting to create provider profile for user:', req.user.id);
+          
           const newProviderData = {
             userId: req.user.id,
             categoryId: parseInt(categoryId),
@@ -2443,7 +2348,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           };
           
           const createdProvider = await storage.createServiceProvider(newProviderData);
-          console.log('Provider profile created successfully:', createdProvider);
+          
           
           res.json(createdProvider);
           return;
@@ -2460,7 +2365,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         yearsOfExperience: experience ? parseInt(experience) : null
       });
       
-      console.log('Provider updated successfully:', updatedProvider);
+      
       res.json(updatedProvider);
     } catch (error) {
       console.error('Error updating service provider profile:', error);
@@ -3216,23 +3121,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     req.user = req.session.user;
 
     try {
-      console.log('🔍 Available work orders request from user:', req.user.id);
+      
       
       const provider = await storage.getServiceProviderByUserId(req.user!.id);
       if (!provider) {
-        console.log('❌ Provider profile not found for user:', req.user.id);
+      
         return res.status(404).json({ message: "Provider profile not found" });
       }
 
-      console.log('✅ Provider found:', {
-        providerId: provider.id,
-        categoryId: provider.categoryId,
-        categoryName: provider.category?.name
-      });
-
       // Get all tasks that are open
       const tasks = await storage.getTasks();
-      console.log('📊 Raw tasks found:', tasks.length);
+      
       
       // Filter tasks that match provider's category and are open
       const filteredTasks = tasks.filter(task => 
@@ -3240,11 +3139,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         task.status === 'open' &&
         task.clientId !== req.user!.id
       );
-
-      console.log('📋 Filtered tasks for provider:', filteredTasks.length);
-      filteredTasks.forEach((task, index) => {
-        console.log(`  ${index + 1}. ID: ${task.id}, Title: ${task.title}, Status: ${task.status}, Category: ${task.categoryId}`);
-      });
 
       // Convert tasks to work order format
       const workOrders = await Promise.all(filteredTasks.map(async (task) => {
@@ -3292,7 +3186,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         };
       }));
 
-      console.log('✅ Returning work orders:', workOrders.length);
+      
       res.json(workOrders);
     } catch (error) {
       console.error('❌ Error in available work orders endpoint:', error);
@@ -3931,27 +3825,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     
     try {
-      console.log('🔍 Fetching recently verified providers...');
+      
       
       // Get providers verified in the last 7 days
       const providers = await storage.getServiceProviders();
-      console.log('📋 Total providers found:', providers.length);
-      
-      // Debug: Log all providers and their verification status
-      providers.forEach(p => {
-        console.log(`Provider ${p.id}: status=${p.verificationStatus}, verifiedAt=${p.verifiedAt}`);
-      });
       
       const recentlyVerified = [];
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-      console.log('📅 Seven days ago:', sevenDaysAgo);
       
       for (const provider of providers) {
         if (provider.verificationStatus === 'verified' && 
             provider.verifiedAt && 
             new Date(provider.verifiedAt) >= sevenDaysAgo) {
-          console.log(`✅ Found recently verified provider: ${provider.id}`);
+          
           try {
             const user = await storage.getUser(provider.userId);
             
@@ -3976,7 +3863,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      console.log(`📋 Returning ${recentlyVerified.length} recently verified providers`);
+      
       res.json(recentlyVerified);
     } catch (error) {
       console.error('❌ Error in recently verified endpoint:', error);
@@ -3996,10 +3883,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     
     try {
-      console.log('📊 Fetching verification statistics...');
       
       const providers = await storage.getServiceProviders();
-      console.log('📋 Total providers:', providers.length);
+      
       
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -4015,7 +3901,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         rejected: providers.filter(p => p.verificationStatus === 'rejected').length
       };
       
-      console.log('📈 Verification stats:', stats);
+      
       res.json(stats);
     } catch (error) {
       console.error('❌ Error fetching verification stats:', error);
@@ -4208,25 +4094,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     
     try {
-      console.log('🧪 Testing individual queries...');
+      
       
       // Test 1: Get all providers
       const providers = await storage.getServiceProviders();
-      console.log('✅ Providers query successful:', providers.length);
+      
       
       // Test 2: Get first provider's user
       if (providers.length > 0) {
         const firstProvider = providers[0];
-        console.log('🔍 Testing with provider:', firstProvider.id);
+        
         
         const user = await storage.getUser(firstProvider.userId);
-        console.log('✅ User query successful:', user ? 'User found' : 'User not found');
+        
         
         const category = await storage.getServiceCategory(firstProvider.categoryId);
-        console.log('✅ Category query successful:', category ? 'Category found' : 'Category not found');
+        
         
         const documents = await storage.getServiceProviderDocuments(firstProvider.id);
-        console.log('✅ Documents query successful:', documents.length, 'documents found');
+        
         
         res.json({
           success: true,
@@ -4260,7 +4146,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Simple test endpoint
   app.get("/api/test-simple", async (req, res) => {
-    console.log('🧪 Simple test endpoint hit');
+    
     res.json({ message: "Test endpoint working", timestamp: new Date().toISOString() });
   });
 
@@ -4419,23 +4305,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     req.user = req.session.user;
 
     try {
-      console.log('🔍 Available work orders request from user:', req.user.id);
+      
       
       const provider = await storage.getServiceProviderByUserId(req.user!.id);
       if (!provider) {
-        console.log('❌ Provider profile not found for user:', req.user.id);
+      
         return res.status(404).json({ message: "Provider profile not found" });
       }
 
-      console.log('✅ Provider found:', {
-        providerId: provider.id,
-        categoryId: provider.categoryId,
-        categoryName: provider.category?.name
-      });
-
       // Get all tasks that are open
       const tasks = await storage.getTasks();
-      console.log('📊 Raw tasks found:', tasks.length);
       
       // Filter tasks that match provider's category and are open
       const filteredTasks = tasks.filter(task => 
@@ -4443,11 +4322,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         task.status === 'open' &&
         task.clientId !== req.user!.id
       );
-
-      console.log('📋 Filtered tasks for provider:', filteredTasks.length);
-      filteredTasks.forEach((task, index) => {
-        console.log(`  ${index + 1}. ID: ${task.id}, Title: ${task.title}, Status: ${task.status}, Category: ${task.categoryId}`);
-      });
 
       // Convert tasks to work order format
       const workOrders = await Promise.all(filteredTasks.map(async (task) => {
@@ -4494,8 +4368,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           distance: null
         };
       }));
-
-      console.log('✅ Returning work orders:', workOrders.length);
       res.json(workOrders);
     } catch (error) {
       console.error('❌ Error in available work orders endpoint:', error);

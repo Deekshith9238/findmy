@@ -29,13 +29,11 @@ export default function ProfilePictureUpload({
     const file = event.target.files?.[0];
     if (!file) return;
 
-    console.log('File selected:', file.name, file.size, file.type);
 
     try {
       // Validate file size and type first
       const maxSize = 2 * 1024 * 1024; // 2MB
       if (file.size > maxSize) {
-        console.log('File too large:', file.size);
         toast({
           title: "File too large",
           description: "Profile picture must be less than 2MB",
@@ -46,7 +44,6 @@ export default function ProfilePictureUpload({
 
       const allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
       if (!allowedTypes.includes(file.type)) {
-        console.log('Invalid file type:', file.type);
         toast({
           title: "Invalid file type",
           description: "Please select a JPEG, PNG, or GIF image",
@@ -56,12 +53,9 @@ export default function ProfilePictureUpload({
       }
 
       // Read file and show cropper
-      console.log('Reading file...');
       const imageDataUrl = await readFile(file);
-      console.log('File read successfully, setting selected image and showing cropper');
       setSelectedImage(imageDataUrl);
       setShowCropper(true);
-      console.log('showCropper set to true, selectedImage set');
     } catch (error) {
       console.error('Error in handleFileSelect:', error);
       toast({
@@ -128,7 +122,6 @@ export default function ProfilePictureUpload({
   const initials = userName.split(' ').map(n => n[0]).join('').toUpperCase();
 
   // Debug logging
-  console.log('Render state:', { showCropper, selectedImage: !!selectedImage, isUploading });
 
   return (
     <div className="flex flex-col items-center space-y-4">
@@ -182,7 +175,6 @@ export default function ProfilePictureUpload({
           imageSrc={selectedImage}
           isOpen={showCropper}
           onClose={() => {
-            console.log('Closing cropper');
             setShowCropper(false);
             setSelectedImage(null);
           }}

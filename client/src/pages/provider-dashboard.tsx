@@ -104,18 +104,6 @@ export default function ProviderDashboard() {
       task.client?.id !== user?.id
   );
 
-  console.log('📊 Debug Info:', {
-    availableWorkOrdersCount: availableWorkOrders?.length || 0,
-    providerProfile: providerProfile ? {
-      id: providerProfile.id,
-      categoryId: providerProfile.category?.id,
-      categoryName: providerProfile.category?.name
-    } : null,
-    userId: user?.id,
-    filteredWorkOrdersCount: filteredWorkOrders?.length || 0,
-    isFullyVerified
-  });
-
   // Mutation for accepting work orders directly (no bidding)
   const acceptWorkMutation = useMutation({
     mutationFn: async (workOrderId: number) => {
@@ -350,7 +338,7 @@ export default function ProviderDashboard() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-medium text-gray-600">Available Jobs</p>
-                    <p className="text-3xl font-bold text-gray-900">{filteredWorkOrders?.length || 0}</p>
+                    <p className="text-3xl font-bold text-gray-900">{filteredTasks?.length || 0}</p>
                     <p className="text-sm text-blue-600 mt-1">In your area</p>
                   </div>
                   <div className="h-12 w-12 bg-orange-100 rounded-lg flex items-center justify-center">
@@ -374,7 +362,7 @@ export default function ProviderDashboard() {
               >
                 <div className="flex items-center gap-2">
                   <FileText className="h-5 w-5" />
-                  Available Work Orders ({filteredWorkOrders?.length || 0})
+                  Available Work Orders ({filteredTasks?.length || 0})
                 </div>
               </button>
               <button
@@ -469,9 +457,9 @@ export default function ProviderDashboard() {
                    based on the context, but the new code doesn't define it.
                    For now, I'll remove the `tasksLoading` check as it's not in the new_code.
                    If the intent was to show a loading state, it should be handled by the new_code. */}
-              {isFullyVerified && filteredWorkOrders && filteredWorkOrders.length > 0 ? (
+              {isFullyVerified && filteredTasks && filteredTasks.length > 0 ? (
                 <div className="grid gap-6">
-                  {filteredWorkOrders.map((task) => (
+                  {filteredTasks.map((task) => (
                     <Card key={task.id} className="overflow-hidden">
                       <CardContent className="p-6">
                         <div className="flex flex-col md:flex-row justify-between gap-4">

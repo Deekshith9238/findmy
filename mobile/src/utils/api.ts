@@ -30,15 +30,12 @@ export const apiRequest = async (endpoint: string, options: RequestInit = {}) =>
 
   // Clean up any duplicate cookies that might exist
   if (authCookie && authCookie.includes(',')) {
-    console.log('Found duplicate cookies, cleaning up...');
     // Take only the first cookie
     const firstCookie = authCookie.split(',')[0].trim();
     authCookie = firstCookie;
     await SecureStore.setItemAsync('auth-cookie', authCookie);
-    console.log('Cleaned cookie stored:', authCookie);
   }
 
-  console.log(`API Request [${endpoint}]:`, {
     url,
     cookie: authCookie ? 'Present' : 'Missing',
     cookieValue: authCookie,
@@ -69,7 +66,6 @@ export const apiRequest = async (endpoint: string, options: RequestInit = {}) =>
     // Handle authentication cookies - parse the Set-Cookie header properly
     const setCookieHeader = response.headers.get('set-cookie');
     if (setCookieHeader) {
-      console.log('Set-Cookie header received:', setCookieHeader);
       // Extract the session cookie from the Set-Cookie header
       // Handle multiple cookies by splitting and finding the session cookie
       const cookies = setCookieHeader.split(',').map(cookie => cookie.trim());
@@ -87,9 +83,7 @@ export const apiRequest = async (endpoint: string, options: RequestInit = {}) =>
       if (sessionCookie) {
         authCookie = sessionCookie;
         await SecureStore.setItemAsync('auth-cookie', authCookie);
-        console.log('Session cookie stored:', authCookie);
       } else {
-        console.log('No session cookie found in Set-Cookie header');
       }
     }
 
@@ -98,7 +92,6 @@ export const apiRequest = async (endpoint: string, options: RequestInit = {}) =>
       const error = new Error(errorData.message || `HTTP error! status: ${response.status}`);
       
       // Log the request details for debugging
-      console.log(`API Request failed [${endpoint}]:`, {
         status: response.status,
         cookie: authCookie ? 'Present' : 'Missing',
         cookieValue: authCookie,

@@ -46,7 +46,6 @@ export function useWebSocketNotifications(userId: number | null) {
     wsConnection = new WebSocket(wsUrl);
 
     wsConnection.onopen = () => {
-      console.log('WebSocket connected');
       wsConnection?.send(JSON.stringify({ type: 'authenticate', userId }));
     };
 
@@ -69,7 +68,6 @@ export function useWebSocketNotifications(userId: number | null) {
     };
 
     wsConnection.onclose = () => {
-      console.log('WebSocket disconnected');
     };
 
     wsConnection.onerror = (error) => {

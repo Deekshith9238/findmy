@@ -39,14 +39,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const checkAuthStatus = async () => {
     try {
-      console.log('Checking auth status...');
       const userData = await authApi.getCurrentUser();
-      console.log('Auth check successful, user:', userData);
       setUser(userData);
     } catch (error) {
       // User is not authenticated - this is expected for new users
       // Don't log this as an error since it's normal behavior
-      console.log('Auth check failed (expected for new users):', error);
       setUser(null);
     } finally {
       setIsLoading(false);
@@ -62,27 +59,21 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       
       // Check what's stored after clearing
       const storedCookie = await SecureStore.getItemAsync('auth-cookie');
-      console.log('Cookie after clearing:', storedCookie);
       
       const response = await authApi.login(credentials);
-      console.log('Login successful, user data:', response);
       // Login returns user object directly, not nested in response.user
       setUser(response);
       
       // Check what's stored after login
       const newStoredCookie = await SecureStore.getItemAsync('auth-cookie');
-      console.log('Cookie after login:', newStoredCookie);
       
       // Add a longer delay and then refresh the session to ensure it's established
       setTimeout(async () => {
         try {
-          console.log('Refreshing session after login...');
           // Double-check that cookie is stored before refreshing
           const cookieBeforeRefresh = await SecureStore.getItemAsync('auth-cookie');
-          console.log('Cookie before refresh:', cookieBeforeRefresh);
           await refreshUser();
         } catch (error) {
-          console.log('Session refresh failed:', error);
         }
       }, 1000); // Increased from 500ms to 1000ms
       
