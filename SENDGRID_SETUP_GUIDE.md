@@ -29,19 +29,6 @@ Your email system now has a **smart fallback mechanism**:
 
 **Update your `.env` file:**
 
-```env
-# Existing AWS SES config (keep this)
-AWS_SES_SMTP_USERNAME="AKIAUW6PYEJFGH5Z2JB6"
-AWS_SES_SMTP_PASSWORD="BEff+54kxYRyR4tINm988pzzTRWp5+iq69vANihWux3k"
-AWS_SES_SMTP_HOST="email-smtp.eu-north-1.amazonaws.com"
-AWS_SES_SMTP_PORT="587"
-AWS_SES_FROM_EMAIL="noreply@findmyhelper.ca"
-
-# Add SendGrid config (replace with your actual API key)
-SENDGRID_API_KEY="SG.your-actual-api-key-here"
-SENDGRID_FROM_EMAIL="noreply@findmyhelper.ca"
-```
-
 ### **Step 4: Verify Sender (Optional but Recommended)**
 
 1. **In SendGrid Dashboard**: Settings → Sender Authentication
