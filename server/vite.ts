@@ -22,7 +22,6 @@ export async function setupVite(app: Express, server: Server) {
   const serverOptions = {
     middlewareMode: true,
     hmr: { server },
-    allowedHosts: true,
   };
 
   const vite = await createViteServer({
@@ -44,6 +43,9 @@ export async function setupVite(app: Express, server: Server) {
     const url = req.originalUrl;
 
     try {
+      // Handle URL encoding issues
+      const decodedUrl = decodeURIComponent(url);
+      
       const clientTemplate = path.resolve(
         import.meta.dirname,
         "..",
@@ -57,8 +59,15 @@ export async function setupVite(app: Express, server: Server) {
         `src="/src/main.tsx"`,
         `src="/src/main.tsx?v=${nanoid()}"`,
       );
-      const page = await vite.transformIndexHtml(url, template);
-      res.status(200).set({ "Content-Type": "text/html" }).end(page);
+      
+      try {
+        const page = await vite.transformIndexHtml(decodedUrl, template);
+        res.status(200).set({ "Content-Type": "text/html" }).end(page);
+      } catch (transformError) {
+        // If transformIndexHtml fails, serve the template directly
+        console.warn('Vite transform failed, serving template directly:', transformError);
+        res.status(200).set({ "Content-Type": "text/html" }).end(template);
+      }
     } catch (e) {
       vite.ssrFixStacktrace(e as Error);
       next(e);
