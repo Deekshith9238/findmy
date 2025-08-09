@@ -1,3 +1,4 @@
+import { eq, and, desc } from "drizzle-orm";
 import { 
   users, type User, type InsertUser,
   serviceCategories, type ServiceCategory, type InsertServiceCategory,
@@ -11,18 +12,17 @@ import {
   escrowPayments, type EscrowPayment, type InsertEscrowPayment,
   workCompletionPhotos, type WorkCompletionPhoto, type InsertWorkCompletionPhoto,
   providerBankAccounts, type ProviderBankAccount, type InsertProviderBankAccount,
-  // FieldNation-style entities
   workOrders, type WorkOrder, type InsertWorkOrder,
   jobBids, type JobBid, type InsertJobBid,
   providerSkills, type ProviderSkill, type InsertProviderSkill,
   providerEquipment, type ProviderEquipment, type InsertProviderEquipment,
-  otpVerifications, type OtpVerification, type InsertOtpVerification
+  otpVerifications, type OtpVerification, type InsertOtpVerification,
+  taskQuotes, type TaskQuote, type InsertTaskQuote
 } from "@shared/schema";
 import session from "express-session";
 import createMemoryStore from "memorystore";
 import connectPg from "connect-pg-simple";
 import { db, pool } from "./db";
-import { eq, desc, and } from "drizzle-orm";
 
 const MemoryStore = createMemoryStore(session);
 
@@ -36,6 +36,7 @@ export interface IStorage {
   updateUser(id: number, user: Partial<User>): Promise<User | undefined>;
   getAllUsers(): Promise<User[]>;
   getStaffUsers(): Promise<User[]>;
+  getUsersByRole(role: string): Promise<User[]>;
   deleteUser(id: number): Promise<boolean>;
   
   // Service Category methods
@@ -60,9 +61,17 @@ export interface IStorage {
   getTasksByCategory(categoryId: number): Promise<Task[]>;
   updateTask(id: number, task: Partial<Task>): Promise<Task | undefined>;
   
+  // Task Quotes methods (3-stage approval system)
+  createTaskQuote(quote: InsertTaskQuote): Promise<TaskQuote>;
+  getTaskQuote(id: number): Promise<TaskQuote | undefined>;
+  getTaskQuotesByTask(taskId: number): Promise<TaskQuote[]>;
+  getTaskQuoteByTaskAndProvider(taskId: number, providerId: number): Promise<TaskQuote | undefined>;
+  updateTaskQuote(id: number, quote: Partial<TaskQuote>): Promise<TaskQuote | undefined>;
+  
   // Service Request methods
   createServiceRequest(request: InsertServiceRequest): Promise<ServiceRequest>;
   getServiceRequest(id: number): Promise<ServiceRequest | undefined>;
+  getServiceRequests(): Promise<ServiceRequest[]>;
   getServiceRequestsByProvider(providerId: number): Promise<ServiceRequest[]>;
   getServiceRequestsByClient(clientId: number): Promise<ServiceRequest[]>;
   updateServiceRequest(id: number, request: Partial<ServiceRequest>): Promise<ServiceRequest | undefined>;
@@ -74,6 +83,7 @@ export interface IStorage {
   // Service Provider Document methods
   createServiceProviderDocument(document: InsertServiceProviderDocument): Promise<ServiceProviderDocument>;
   getServiceProviderDocuments(providerId: number): Promise<ServiceProviderDocument[]>;
+  getServiceProviderDocument(id: number): Promise<ServiceProviderDocument | undefined>;
   updateServiceProviderDocument(id: number, document: Partial<ServiceProviderDocument>): Promise<ServiceProviderDocument | undefined>;
   
   // Call Center Assignment methods
@@ -154,6 +164,8 @@ export class MemStorage implements IStorage {
   private escrowPayments: Map<number, EscrowPayment>;
   private workCompletionPhotos: Map<number, WorkCompletionPhoto>;
   private providerBankAccounts: Map<number, ProviderBankAccount>;
+  private taskQuotes: Map<number, TaskQuote>;
+
   // FieldNation-style maps
   private workOrders: Map<number, WorkOrder>;
   private jobBids: Map<number, JobBid>;
@@ -176,6 +188,7 @@ export class MemStorage implements IStorage {
     this.escrowPayments = new Map();
     this.workCompletionPhotos = new Map();
     this.providerBankAccounts = new Map();
+    this.taskQuotes = new Map();
     // FieldNation-style maps
     this.workOrders = new Map();
     this.jobBids = new Map();
@@ -408,6 +421,57 @@ export class MemStorage implements IStorage {
     return updatedTask;
   }
 
+  // Task Quotes methods (3-stage approval system)
+  async createTaskQuote(quote: InsertTaskQuote): Promise<TaskQuote> {
+    const id = this.currentId.taskQuotes++;
+    const createdAt = new Date();
+    const newQuote: TaskQuote = {
+      ...quote,
+      id,
+      createdAt,
+      updatedAt: createdAt,
+      toolsProvided: quote.toolsProvided || null,
+      additionalServices: quote.additionalServices || null,
+      priceApproved: false,
+      priceApprovedAt: null,
+      priceApprovedBy: null,
+      taskReviewed: false,
+      taskReviewedAt: null,
+      taskReviewedBy: null,
+      customerDetailsReleased: false,
+      customerDetailsReleasedAt: null,
+      customerDetailsReleasedBy: null,
+      status: "pending"
+    };
+    this.taskQuotes.set(id, newQuote);
+    return newQuote;
+  }
+
+  async getTaskQuote(id: number): Promise<TaskQuote | undefined> {
+    return this.taskQuotes.get(id);
+  }
+
+  async getTaskQuotesByTask(taskId: number): Promise<TaskQuote[]> {
+    return Array.from(this.taskQuotes.values()).filter(
+      (quote) => quote.taskId === taskId
+    );
+  }
+
+  async getTaskQuoteByTaskAndProvider(taskId: number, providerId: number): Promise<TaskQuote | undefined> {
+    return Array.from(this.taskQuotes.values()).find(
+      (quote) => quote.taskId === taskId && quote.providerId === providerId
+    );
+  }
+
+  async updateTaskQuote(id: number, quoteData: Partial<TaskQuote>): Promise<TaskQuote | undefined> {
+    const quote = await this.getTaskQuote(id);
+    if (!quote) return undefined;
+    
+    const updatedQuote = { ...quote, ...quoteData, updatedAt: new Date() };
+    this.taskQuotes.set(id, updatedQuote);
+    return updatedQuote;
+  }
+
   // Service Request methods
   async createServiceRequest(request: InsertServiceRequest): Promise<ServiceRequest> {
     const id = this.currentId.serviceRequests++;
@@ -436,6 +500,10 @@ export class MemStorage implements IStorage {
     return this.serviceRequests.get(id);
   }
   
+  async getServiceRequests(): Promise<ServiceRequest[]> {
+    return Array.from(this.serviceRequests.values());
+  }
+
   async getServiceRequestsByProvider(providerId: number): Promise<ServiceRequest[]> {
     return Array.from(this.serviceRequests.values()).filter(
       (request) => request.providerId === providerId
@@ -513,6 +581,10 @@ export class MemStorage implements IStorage {
     );
   }
 
+  async getServiceProviderDocument(id: number): Promise<ServiceProviderDocument | undefined> {
+    return this.serviceProviderDocuments.get(id);
+  }
+
   async updateServiceProviderDocument(id: number, documentData: Partial<ServiceProviderDocument>): Promise<ServiceProviderDocument | undefined> {
     const document = this.serviceProviderDocuments.get(id);
     if (document) {
@@ -564,6 +636,12 @@ export class MemStorage implements IStorage {
   async getStaffUsers(): Promise<User[]> {
     return Array.from(this.users.values()).filter(
       (user) => user.role === "service_verifier" || user.role === "call_center"
+    );
+  }
+
+  async getUsersByRole(role: string): Promise<User[]> {
+    return Array.from(this.users.values()).filter(
+      (user) => user.role === role
     );
   }
 
@@ -633,15 +711,11 @@ export class DatabaseStorage implements IStorage {
     const existingAdmin = await this.getUserByEmail(adminEmail);
     
     if (!existingAdmin) {
-      // Import password hashing function
-      const { scrypt, randomBytes } = await import("crypto");
-      const { promisify } = await import("util");
-      const scryptAsync = promisify(scrypt);
+      // Import password hashing function from auth.ts
+      const { hashPassword } = await import('./auth');
       
       const password = "Fmh@2025";
-      const salt = randomBytes(16).toString("hex");
-      const buf = (await scryptAsync(password, salt, 64)) as Buffer;
-      const hashedPassword = `${buf.toString("hex")}.${salt}`;
+      const hashedPassword = hashPassword(password);
       
       await db.insert(users).values({
         email: adminEmail,
@@ -649,8 +723,13 @@ export class DatabaseStorage implements IStorage {
         password: hashedPassword,
         firstName: "Admin",
         lastName: "User",
-        role: "admin"
+        role: "admin",
+        isEmailVerified: true
       });
+      
+      console.log('✅ Admin user created successfully');
+    } else {
+      console.log('✅ Admin user already exists');
     }
   }
 
@@ -723,13 +802,20 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createServiceProvider(provider: InsertServiceProvider): Promise<ServiceProvider> {
-    const [newProvider] = await db.insert(serviceProviders).values({
-      ...provider,
-      rating: 0,
-      completedJobs: 0
-    }).returning();
-    
-    return newProvider;
+    try {
+      console.log('DatabaseStorage: Creating service provider with data:', provider);
+      const [newProvider] = await db.insert(serviceProviders).values({
+        ...provider,
+        rating: 0,
+        completedJobs: 0
+      }).returning();
+      
+      console.log('DatabaseStorage: Service provider created successfully:', newProvider);
+      return newProvider;
+    } catch (error) {
+      console.error('DatabaseStorage: Error creating service provider:', error);
+      throw error;
+    }
   }
 
   async getServiceProvider(id: number): Promise<ServiceProvider | undefined> {
@@ -825,12 +911,36 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateTask(id: number, taskData: Partial<Task>): Promise<Task | undefined> {
-    const [task] = await db.update(tasks)
-      .set(taskData)
-      .where(eq(tasks.id, id))
-      .returning();
-    
-    return task;
+    const result = await db.update(tasks).set(taskData).where(eq(tasks.id, id)).returning();
+    return result[0];
+  }
+
+  // Task Quotes methods (3-stage approval system)
+  async createTaskQuote(quote: InsertTaskQuote): Promise<TaskQuote> {
+    const result = await db.insert(taskQuotes).values(quote).returning();
+    return result[0];
+  }
+
+  async getTaskQuote(id: number): Promise<TaskQuote | undefined> {
+    const result = await db.select().from(taskQuotes).where(eq(taskQuotes.id, id));
+    return result[0];
+  }
+
+  async getTaskQuotesByTask(taskId: number): Promise<TaskQuote[]> {
+    const result = await db.select().from(taskQuotes).where(eq(taskQuotes.taskId, taskId));
+    return result;
+  }
+
+  async getTaskQuoteByTaskAndProvider(taskId: number, providerId: number): Promise<TaskQuote | undefined> {
+    const result = await db.select().from(taskQuotes).where(
+      and(eq(taskQuotes.taskId, taskId), eq(taskQuotes.providerId, providerId))
+    );
+    return result[0];
+  }
+
+  async updateTaskQuote(id: number, quoteData: Partial<TaskQuote>): Promise<TaskQuote | undefined> {
+    const result = await db.update(taskQuotes).set(quoteData).where(eq(taskQuotes.id, id)).returning();
+    return result[0];
   }
 
   async createServiceRequest(request: InsertServiceRequest): Promise<ServiceRequest> {
@@ -841,6 +951,10 @@ export class DatabaseStorage implements IStorage {
   async getServiceRequest(id: number): Promise<ServiceRequest | undefined> {
     const [request] = await db.select().from(serviceRequests).where(eq(serviceRequests.id, id));
     return request;
+  }
+
+  async getServiceRequests(): Promise<ServiceRequest[]> {
+    return db.select().from(serviceRequests);
   }
 
   async getServiceRequestsByProvider(providerId: number): Promise<ServiceRequest[]> {
@@ -893,6 +1007,11 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(serviceProviderDocuments).where(eq(serviceProviderDocuments.providerId, providerId));
   }
 
+  async getServiceProviderDocument(id: number): Promise<ServiceProviderDocument | undefined> {
+    const [document] = await db.select().from(serviceProviderDocuments).where(eq(serviceProviderDocuments.id, id));
+    return document;
+  }
+
   async updateServiceProviderDocument(id: number, documentData: Partial<ServiceProviderDocument>): Promise<ServiceProviderDocument | undefined> {
     const [document] = await db.update(serviceProviderDocuments)
       .set(documentData)
@@ -932,6 +1051,10 @@ export class DatabaseStorage implements IStorage {
     ).union(
       db.select().from(users).where(eq(users.role, "call_center"))
     );
+  }
+
+  async getUsersByRole(role: string): Promise<User[]> {
+    return db.select().from(users).where(eq(users.role, role));
   }
 
   async deleteUser(id: number): Promise<boolean> {

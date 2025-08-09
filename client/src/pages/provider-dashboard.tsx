@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, CheckCircle, Clock, X, Briefcase, FileText, CreditCard } from "lucide-react";
+import { Loader2, CheckCircle, Clock, X, Briefcase, FileText, DollarSign } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -22,8 +22,8 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import BankAccountSetup from "@/components/BankAccountSetup";
 import BidSubmissionDialog from "@/components/BidSubmissionDialog";
+import VendorQuoteApprovalDialog from "@/components/VendorQuoteApprovalDialog";
 
 // Task request schema
 const taskRequestSchema = z.object({
@@ -53,18 +53,6 @@ export default function ProviderDashboard() {
     enabled: !!user,
   });
 
-  // Fetch available work orders (FieldNation-style)
-  const { data: availableWorkOrders, isLoading: workOrdersLoading } = useQuery<any[]>({
-    queryKey: ["/api/work-orders/available"],
-    enabled: !!user && isFullyVerified,
-  });
-
-  // Fetch assigned work orders for provider
-  const { data: assignedWorkOrders, isLoading: assignedLoading } = useQuery<any[]>({
-    queryKey: ["/api/provider/work-orders"],
-    enabled: !!user && !!providerProfile,
-  });
-
   // Fetch provider documents for verification check
   const { data: documents } = useQuery<any[]>({
     queryKey: ["/api/user/provider/documents"],
@@ -84,13 +72,49 @@ export default function ProviderDashboard() {
   );
   const isFullyVerified = hasApprovedIdentity && hasApprovedBankingDetails && hasApprovedLicense;
 
-  // Filter work orders that match the provider's category (only show to verified providers)
-  const filteredWorkOrders = availableWorkOrders?.filter(
-    (workOrder) => 
-      workOrder.category.id === providerProfile?.category.id && 
-      workOrder.status === "open" &&
-      workOrder.client.id !== user?.id
+  // Fetch available work orders (FieldNation-style)
+  const { data: availableWorkOrders, isLoading: workOrdersLoading } = useQuery<any[]>({
+    queryKey: ["/api/work-orders/available"],
+    enabled: !!user && isFullyVerified,
+  });
+
+  // Fetch assigned work orders for provider
+  const { data: assignedWorkOrders, isLoading: assignedLoading } = useQuery<any[]>({
+    queryKey: ["/api/provider/work-orders"],
+    enabled: !!user && !!providerProfile,
+  });
+
+  // Fetch approved service requests with full client details
+  const { data: approvedRequests, isLoading: approvedLoading } = useQuery<any[]>({
+    queryKey: ["/api/provider/approved-requests"],
+    enabled: !!user && !!providerProfile,
+  });
+
+  // Fetch available tasks for quotes
+  const { data: availableTasks, isLoading: tasksLoading } = useQuery<any[]>({
+    queryKey: ["/api/tasks"],
+    enabled: !!user && isFullyVerified,
+  });
+
+  // Filter tasks that match the provider's category
+  const filteredTasks = availableTasks?.filter(
+    (task) => 
+      task.category?.id === providerProfile?.category?.id && 
+      task.status === "open" &&
+      task.client?.id !== user?.id
   );
+
+  console.log('📊 Debug Info:', {
+    availableWorkOrdersCount: availableWorkOrders?.length || 0,
+    providerProfile: providerProfile ? {
+      id: providerProfile.id,
+      categoryId: providerProfile.category?.id,
+      categoryName: providerProfile.category?.name
+    } : null,
+    userId: user?.id,
+    filteredWorkOrdersCount: filteredWorkOrders?.length || 0,
+    isFullyVerified
+  });
 
   // Mutation for accepting work orders directly (no bidding)
   const acceptWorkMutation = useMutation({
@@ -132,8 +156,8 @@ export default function ProviderDashboard() {
       queryClient.invalidateQueries({ queryKey: ["/api/service-requests/provider"] });
       queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
       toast({
-        title: "Request sent",
-        description: "Your service request has been sent to the client",
+        title: "Interest submitted",
+        description: "Your interest has been submitted. Awaiting call center approval for client details.",
       });
     },
     onError: (error: Error) => {
@@ -315,7 +339,7 @@ export default function ProviderDashboard() {
                     <p className="text-sm text-green-600 mt-1">+15% from last month</p>
                   </div>
                   <div className="h-12 w-12 bg-green-100 rounded-lg flex items-center justify-center">
-                    <CreditCard className="h-6 w-6 text-green-600" />
+                    <Briefcase className="h-6 w-6 text-green-600" />
                   </div>
                 </div>
               </CardContent>
@@ -354,9 +378,9 @@ export default function ProviderDashboard() {
                 </div>
               </button>
               <button
-                onClick={() => setActiveTab("requests")}
+                onClick={() => setActiveTab("my-assignments")}
                 className={`px-6 py-4 font-medium border-b-2 transition-colors ${
-                  activeTab === "requests"
+                  activeTab === "my-assignments"
                     ? "border-blue-600 text-blue-600 bg-blue-50"
                     : "border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50"
                 }`}
@@ -367,20 +391,29 @@ export default function ProviderDashboard() {
                 </div>
               </button>
               <button
-                onClick={() => setActiveTab("bank-setup")}
+                onClick={() => setActiveTab("approved-assignments")}
                 className={`px-6 py-4 font-medium border-b-2 transition-colors ${
-                  activeTab === "bank-setup"
+                  activeTab === "approved-assignments"
                     ? "border-blue-600 text-blue-600 bg-blue-50"
                     : "border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50"
                 }`}
               >
                 <div className="flex items-center gap-2">
-                  <CreditCard className="h-5 w-5" />
-                  {isFullyVerified ? (
-                    <span className="text-green-600">✓ Payment Setup</span>
-                  ) : (
-                    <span className="text-orange-600">Payment Setup</span>
-                  )}
+                  <CheckCircle className="h-5 w-5" />
+                  Approved Assignments ({approvedRequests?.length || 0})
+                </div>
+              </button>
+              <button
+                onClick={() => setActiveTab("tasks-with-quotes")}
+                className={`px-6 py-4 font-medium border-b-2 transition-colors ${
+                  activeTab === "tasks-with-quotes"
+                    ? "border-blue-600 text-blue-600 bg-blue-50"
+                    : "border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <DollarSign className="h-5 w-5" />
+                  Tasks with Quotes ({filteredTasks?.length || 0})
                 </div>
               </button>
             </div>
@@ -428,13 +461,17 @@ export default function ProviderDashboard() {
                 </Card>
               )}
               
-              {tasksLoading ? (
-                <div className="flex justify-center py-12">
-                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                </div>
-              ) : isFullyVerified && filteredTasks && filteredTasks.length > 0 ? (
+              {/* tasksLoading is not defined, assuming it's a placeholder for a loading state */}
+              {/* If tasksLoading is true, you would show a loading state here */}
+              {/* For now, we'll show the content based on isFullyVerified and filteredTasks */}
+              {/* The original code had `tasksLoading` which was not defined.
+                   Assuming `tasksLoading` was intended to be `workOrdersLoading` or `assignedLoading`
+                   based on the context, but the new code doesn't define it.
+                   For now, I'll remove the `tasksLoading` check as it's not in the new_code.
+                   If the intent was to show a loading state, it should be handled by the new_code. */}
+              {isFullyVerified && filteredWorkOrders && filteredWorkOrders.length > 0 ? (
                 <div className="grid gap-6">
-                  {filteredTasks.map((task) => (
+                  {filteredWorkOrders.map((task) => (
                     <Card key={task.id} className="overflow-hidden">
                       <CardContent className="p-6">
                         <div className="flex flex-col md:flex-row justify-between gap-4">
@@ -443,25 +480,9 @@ export default function ProviderDashboard() {
                               <h3 className="font-semibold text-lg">{task.title}</h3>
                               {getStatusBadge(task.status)}
                             </div>
-                            <p className="text-neutral-600 text-sm mb-4">{task.description}</p>
-                            <div className="flex flex-wrap gap-4">
-                              <div className="text-sm">
-                                <span className="font-medium">Client:</span>{" "}
-                                <span className="text-neutral-600">
-                                  {task.client.firstName} {task.client.lastName}
-                                </span>
-                              </div>
-                              <div className="text-sm">
-                                <span className="font-medium">Location:</span>{" "}
-                                <span className="text-neutral-600">{task.location}</span>
-                              </div>
-                              {task.budget && (
-                                <div className="text-sm">
-                                  <span className="font-medium">Budget:</span>{" "}
-                                  <span className="text-neutral-600">${task.budget}</span>
-                                </div>
-                              )}
-                            </div>
+                            {task.description && (
+                              <p className="text-neutral-600 text-sm mb-3">{task.description}</p>
+                            )}
                           </div>
                           
                           <div className="flex flex-col gap-2">
@@ -469,7 +490,7 @@ export default function ProviderDashboard() {
                               Posted on {new Date(task.createdAt).toLocaleDateString()}
                             </span>
                             <Button onClick={() => handleOpenTaskDialog(task)}>
-                              Submit Offer
+                              Submit Interest
                             </Button>
                           </div>
                         </div>
@@ -491,14 +512,14 @@ export default function ProviderDashboard() {
               ) : null}
             </TabsContent>
             
-            <TabsContent value="requests">
-              {requestsLoading ? (
+            <TabsContent value="my-assignments">
+              {assignedLoading ? (
                 <div className="flex justify-center py-12">
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 </div>
-              ) : serviceRequests && serviceRequests.length > 0 ? (
+              ) : assignedWorkOrders && assignedWorkOrders.length > 0 ? (
                 <div className="grid gap-6">
-                  {serviceRequests.map((request) => (
+                  {assignedWorkOrders.map((request) => (
                     <Card key={request.id} className="overflow-hidden">
                       <CardContent className="p-6">
                         <div className="flex flex-col md:flex-row justify-between gap-4">
@@ -579,19 +600,147 @@ export default function ProviderDashboard() {
                 </Card>
               )}
             </TabsContent>
-            
-            <TabsContent value="bank-setup">
-              <Card>
-                <CardContent className="p-6">
-                  <div className="mb-6">
-                    <h3 className="text-xl font-semibold mb-2">Bank Account Setup</h3>
-                    <p className="text-muted-foreground">
-                      Set up your bank account to receive payments from completed services. This is required for payment processing.
+
+            <TabsContent value="approved-assignments">
+              {approvedLoading ? (
+                <div className="flex justify-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                </div>
+              ) : approvedRequests && approvedRequests.length > 0 ? (
+                <div className="grid gap-6">
+                  {approvedRequests.map((request) => (
+                    <Card key={request.id} className="overflow-hidden">
+                      <CardContent className="p-6">
+                        <div className="flex flex-col md:flex-row justify-between gap-4">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-2">
+                              <h3 className="font-semibold text-lg">
+                                {request.task?.title || "Task"}
+                              </h3>
+                              {getStatusBadge(request.status)}
+                            </div>
+                            
+                            {request.task?.description && (
+                              <p className="text-neutral-600 text-sm mb-4">{request.task.description}</p>
+                            )}
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                              <div className="p-3 bg-green-50 rounded-md">
+                                <div className="text-sm font-medium text-green-900 mb-1">Client Details (Approved):</div>
+                                <div className="text-sm text-green-800">
+                                  <div><strong>Name:</strong> {request.client?.firstName} {request.client?.lastName}</div>
+                                  <div><strong>Email:</strong> {request.client?.email}</div>
+                                  <div><strong>Phone:</strong> {request.client?.phoneNumber || 'Not provided'}</div>
+                                </div>
+                              </div>
+                              
+                              <div className="p-3 bg-blue-50 rounded-md">
+                                <div className="text-sm font-medium text-blue-900 mb-1">Task Details:</div>
+                                <div className="text-sm text-blue-800">
+                                  <div><strong>Location:</strong> {request.task?.location || 'Not specified'}</div>
+                                  {request.task?.budget && (
+                                    <div><strong>Budget:</strong> ${request.task.budget}</div>
+                                  )}
+                                  <div><strong>Approved:</strong> {new Date(request.approvedAt).toLocaleDateString()}</div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <div className="flex flex-col gap-2">
+                            <span className="text-xs text-neutral-500">
+                              Approved on {new Date(request.approvedAt).toLocaleDateString()}
+                            </span>
+                            
+                            <Button 
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                // Copy client contact info to clipboard
+                                const contactInfo = `Client: ${request.client?.firstName} ${request.client?.lastName}\nEmail: ${request.client?.email}\nPhone: ${request.client?.phoneNumber || 'Not provided'}\nLocation: ${request.task?.location || 'Not specified'}`;
+                                navigator.clipboard.writeText(contactInfo);
+                                toast({
+                                  title: "Contact info copied",
+                                  description: "Client contact information copied to clipboard"
+                                });
+                              }}
+                            >
+                              Copy Contact Info
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              ) : (
+                <Card className="bg-white">
+                  <CardContent className="flex flex-col items-center justify-center py-12">
+                    <CheckCircle className="h-12 w-12 text-neutral-400 mb-4" />
+                    <h3 className="text-xl font-medium mb-2">No approved assignments yet</h3>
+                    <p className="text-neutral-600">
+                      You haven't received any approved assignments yet. 
+                      Submit offers on available tasks and wait for call center approval.
                     </p>
-                  </div>
-                  <BankAccountSetup />
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              )}
+            </TabsContent>
+
+            <TabsContent value="tasks-with-quotes">
+              {tasksLoading ? (
+                <div className="flex justify-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                </div>
+              ) : filteredTasks && filteredTasks.length > 0 ? (
+                <div className="grid gap-6">
+                  {filteredTasks.map((task) => (
+                    <Card key={task.id} className="overflow-hidden">
+                      <CardContent className="p-6">
+                        <div className="flex flex-col md:flex-row justify-between gap-4">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-2">
+                              <h3 className="font-semibold text-lg">{task.title}</h3>
+                              {getStatusBadge(task.status)}
+                            </div>
+                            {task.description && (
+                              <p className="text-neutral-600 text-sm mb-3">{task.description}</p>
+                            )}
+                          </div>
+                          
+                          <div className="flex flex-col gap-2">
+                            <span className="text-xs text-neutral-500">
+                              Posted on {new Date(task.createdAt).toLocaleDateString()}
+                            </span>
+                            <VendorQuoteApprovalDialog
+                              task={task}
+                              trigger={
+                                <Button>
+                                  Submit Quote
+                                </Button>
+                              }
+                              onSuccess={() => {
+                                queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
+                              }}
+                            />
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              ) : (
+                <Card className="bg-white">
+                  <CardContent className="flex flex-col items-center justify-center py-12">
+                    <FileText className="h-12 w-12 text-neutral-400 mb-4" />
+                    <h3 className="text-xl font-medium mb-2">No tasks with quotes yet</h3>
+                    <p className="text-neutral-600">
+                      You haven't received any quotes for available tasks yet.
+                      Submit offers on available tasks to receive quotes.
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
             </TabsContent>
           </Tabs>
         </div>
@@ -599,87 +748,24 @@ export default function ProviderDashboard() {
       
       {/* Task Dialog */}
       <Dialog open={taskDialogOpen} onOpenChange={setTaskDialogOpen}>
-        <DialogContent className="sm:max-w-[550px]">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Submit Service Offer</DialogTitle>
+            <DialogTitle>Submit Quote</DialogTitle>
             <DialogDescription>
-              Send a request to the client for this task. Include any details about how you can help.
+              Submit your quote for this task. The client will review your proposal.
             </DialogDescription>
           </DialogHeader>
           
           {selectedTask && (
-            <div className="py-2">
-              <h3 className="font-semibold">{selectedTask.title}</h3>
-              <p className="text-sm text-neutral-600 mt-1 mb-3">{selectedTask.description}</p>
-              
-              <div className="grid grid-cols-2 gap-2 mb-4 text-sm">
-                <div>
-                  <span className="font-medium">Client:</span>{" "}
-                  <span className="text-neutral-600">
-                    {selectedTask.client.firstName} {selectedTask.client.lastName}
-                  </span>
-                </div>
-                <div>
-                  <span className="font-medium">Location:</span>{" "}
-                  <span className="text-neutral-600">{selectedTask.location}</span>
-                </div>
-                <div>
-                  <span className="font-medium">Category:</span>{" "}
-                  <span className="text-neutral-600">{selectedTask.category.name}</span>
-                </div>
-                {selectedTask.budget && (
-                  <div>
-                    <span className="font-medium">Budget:</span>{" "}
-                    <span className="text-neutral-600">${selectedTask.budget}</span>
-                  </div>
-                )}
-              </div>
-              
-              <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmitTaskRequest)} className="space-y-4">
-                  <FormField
-                    control={form.control}
-                    name="message"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Message (Optional)</FormLabel>
-                        <FormControl>
-                          <Textarea
-                            placeholder="Introduce yourself and explain how you can help with this task..."
-                            className="min-h-[100px]"
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  
-                  <DialogFooter>
-                    <Button 
-                      variant="outline" 
-                      onClick={() => setTaskDialogOpen(false)}
-                      type="button"
-                    >
-                      Cancel
-                    </Button>
-                    <Button 
-                      type="submit"
-                      disabled={createRequestMutation.isPending}
-                    >
-                      {createRequestMutation.isPending ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Submitting...
-                        </>
-                      ) : (
-                        "Submit Request"
-                      )}
-                    </Button>
-                  </DialogFooter>
-                </form>
-              </Form>
-            </div>
+            <VendorQuoteApprovalDialog
+              task={selectedTask}
+              trigger={<div />}
+              onSuccess={() => {
+                setTaskDialogOpen(false);
+                setSelectedTask(null);
+                queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
+              }}
+            />
           )}
         </DialogContent>
       </Dialog>

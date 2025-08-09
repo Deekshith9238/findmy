@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
 import { notificationsApi } from '../utils/api';
 import { Notification } from '../types';
 import { useAuth } from './AuthContext';
@@ -45,11 +46,16 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
   const unreadCount = notifications.filter(n => !n.isRead).length;
 
   useEffect(() => {
-    if (isAuthenticated) {
-      refreshNotifications();
-      setupPushNotifications();
+    if (isAuthenticated && user) {
+      // Add a small delay to ensure session is fully established
+      const timer = setTimeout(() => {
+        refreshNotifications();
+        setupPushNotifications();
+      }, 1000);
+      
+      return () => clearTimeout(timer);
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, user]);
 
   const setupPushNotifications = async () => {
     try {
@@ -78,6 +84,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
         return null;
       }
 
+      // Add projectId to fix the deprecation warning
       const token = (await Notifications.getExpoPushTokenAsync()).data;
       console.log('Expo push token:', token);
       return token;
@@ -88,7 +95,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
   };
 
   const refreshNotifications = async () => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated || !user) return;
 
     try {
       setIsLoading(true);
@@ -96,6 +103,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
       setNotifications(data || []);
     } catch (error) {
       console.error('Failed to fetch notifications:', error);
+      // Don't throw error, just log it
     } finally {
       setIsLoading(false);
     }

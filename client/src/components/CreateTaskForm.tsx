@@ -24,6 +24,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { ServiceCategory } from "@shared/schema";
 import { Loader2 } from "lucide-react";
+import { Clock, Briefcase, FileText } from "lucide-react";
 
 // Create task schema
 const taskFormSchema = z.object({
@@ -34,6 +35,9 @@ const taskFormSchema = z.object({
   longitude: z.string().optional(), 
   categoryId: z.string().min(1, "Category is required"),
   budget: z.string().min(1, "Budget is required"),
+  toolsRequired: z.string().min(1, "Tools required is mandatory"),
+  estimatedHours: z.string().min(1, "Estimated hours is required"),
+  skillsRequired: z.string().min(1, "Skills required is mandatory"),
   scheduledDate: z.string().optional(),
   scheduledTime: z.string().optional(),
 });
@@ -61,6 +65,7 @@ export default function CreateTaskForm({ onSuccess }: CreateTaskFormProps) {
         latitude: data.latitude ? parseFloat(data.latitude) : undefined,
         longitude: data.longitude ? parseFloat(data.longitude) : undefined,
         budget: data.budget ? parseFloat(data.budget) : undefined,
+        estimatedHours: data.estimatedHours ? parseInt(data.estimatedHours) : undefined,
       };
       
       const res = await apiRequest("POST", "/api/tasks", taskData);
@@ -95,6 +100,9 @@ export default function CreateTaskForm({ onSuccess }: CreateTaskFormProps) {
       longitude: "",
       categoryId: "",
       budget: "",
+      toolsRequired: "",
+      estimatedHours: "",
+      skillsRequired: "",
       scheduledDate: "",
       scheduledTime: "",
     },
@@ -293,6 +301,70 @@ export default function CreateTaskForm({ onSuccess }: CreateTaskFormProps) {
                   <SelectItem value="1000">$1000+ USD</SelectItem>
                 </SelectContent>
               </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        
+        <FormField
+          control={form.control}
+          name="estimatedHours"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel className="flex items-center gap-2">
+                <Clock className="w-4 h-4" />
+                Number of Hours Required *
+              </FormLabel>
+              <FormControl>
+                <Input 
+                  type="number" 
+                  placeholder="e.g. 2" 
+                  min="1"
+                  {...field} 
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        
+        <FormField
+          control={form.control}
+          name="toolsRequired"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel className="flex items-center gap-2">
+                <Briefcase className="w-4 h-4" />
+                Tools Required *
+              </FormLabel>
+              <FormControl>
+                <Textarea 
+                  placeholder="List all tools and equipment needed for this job (e.g. drill, ladder, paint brushes, safety equipment)" 
+                  className="min-h-[80px]" 
+                  {...field} 
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        
+        <FormField
+          control={form.control}
+          name="skillsRequired"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel className="flex items-center gap-2">
+                <FileText className="w-4 h-4" />
+                Skills Required *
+              </FormLabel>
+              <FormControl>
+                <Textarea 
+                  placeholder="Describe specific skills, experience, or certifications needed (e.g. electrical work, plumbing license, painting experience)" 
+                  className="min-h-[80px]" 
+                  {...field} 
+                />
+              </FormControl>
               <FormMessage />
             </FormItem>
           )}

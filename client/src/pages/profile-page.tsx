@@ -10,13 +10,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, User, BriefcaseBusiness, FileText, Settings } from "lucide-react";
+import { Loader2, User, BriefcaseBusiness, FileText, Settings, CreditCard } from "lucide-react";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import ProfilePictureUpload from "@/components/ProfilePictureUpload";
 import DocumentVerification from "@/components/DocumentVerification";
+import BankAccountSetup from "@/components/BankAccountSetup";
 import { useAuth } from "@/hooks/use-auth";
 
 // Validation schemas
@@ -240,13 +241,15 @@ export default function ProfilePage() {
                       <User className="h-4 w-4 mr-2" />
                       Profile Info
                     </TabsTrigger>
-                    <TabsTrigger
-                      value="provider"
-                      className="w-full justify-start px-3 py-2"
-                    >
-                      <BriefcaseBusiness className="h-4 w-4 mr-2" />
-                      Provider Settings
-                    </TabsTrigger>
+                    {user?.role === "service_provider" && (
+                      <TabsTrigger
+                        value="provider"
+                        className="w-full justify-start px-3 py-2"
+                      >
+                        <BriefcaseBusiness className="h-4 w-4 mr-2" />
+                        Provider Settings
+                      </TabsTrigger>
+                    )}
                     {user?.role === "service_provider" && (
                       <TabsTrigger
                         value="documents"
@@ -254,6 +257,15 @@ export default function ProfilePage() {
                       >
                         <FileText className="h-4 w-4 mr-2" />
                         Document Verification
+                      </TabsTrigger>
+                    )}
+                    {user?.role === "service_provider" && (
+                      <TabsTrigger
+                        value="payment"
+                        className="w-full justify-start px-3 py-2"
+                      >
+                        <CreditCard className="h-4 w-4 mr-2" />
+                        Payment Setup
                       </TabsTrigger>
                     )}
                     <TabsTrigger
@@ -379,133 +391,135 @@ export default function ProfilePage() {
                 </Card>
               </TabsContent>
 
-              <TabsContent value="provider" className="mt-0">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Service Provider Settings</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {providerLoading ? (
-                      <div className="flex justify-center py-8">
-                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                      </div>
-                    ) : (
-                      <Form {...providerForm}>
-                        <form onSubmit={providerForm.handleSubmit(onSubmitProviderProfile)} className="space-y-6">
-                          <FormField
-                            control={providerForm.control}
-                            name="categoryId"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Service Category</FormLabel>
-                                <Select 
-                                  onValueChange={(value) => field.onChange(parseInt(value))}
-                                  value={field.value?.toString()}
-                                >
+              {user?.role === "service_provider" && (
+                <TabsContent value="provider" className="mt-0">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Service Provider Settings</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {providerLoading ? (
+                        <div className="flex justify-center py-8">
+                          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                        </div>
+                      ) : (
+                        <Form {...providerForm}>
+                          <form onSubmit={providerForm.handleSubmit(onSubmitProviderProfile)} className="space-y-6">
+                            <FormField
+                              control={providerForm.control}
+                              name="categoryId"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Service Category</FormLabel>
+                                  <Select 
+                                    onValueChange={(value) => field.onChange(parseInt(value))}
+                                    value={field.value?.toString()}
+                                  >
+                                    <FormControl>
+                                      <SelectTrigger>
+                                        <SelectValue placeholder="Select a service category" />
+                                      </SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent>
+                                      {categories?.map((category: any) => (
+                                        <SelectItem key={category.id} value={category.id.toString()}>
+                                          {category.name}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            
+                            <FormField
+                              control={providerForm.control}
+                              name="hourlyRate"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Hourly Rate ($)</FormLabel>
                                   <FormControl>
-                                    <SelectTrigger>
-                                      <SelectValue placeholder="Select a service category" />
-                                    </SelectTrigger>
+                                    <Input
+                                      type="number"
+                                      min="1"
+                                      step="0.01"
+                                      placeholder="Enter your hourly rate"
+                                      {...field}
+                                    />
                                   </FormControl>
-                                  <SelectContent>
-                                    {categories?.map((category: any) => (
-                                      <SelectItem key={category.id} value={category.id.toString()}>
-                                        {category.name}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          
-                          <FormField
-                            control={providerForm.control}
-                            name="hourlyRate"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Hourly Rate ($)</FormLabel>
-                                <FormControl>
-                                  <Input
-                                    type="number"
-                                    min="1"
-                                    step="0.01"
-                                    placeholder="Enter your hourly rate"
-                                    {...field}
-                                  />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          
-                          <FormField
-                            control={providerForm.control}
-                            name="bio"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Bio</FormLabel>
-                                <FormControl>
-                                  <Textarea
-                                    placeholder="Describe your services and experience"
-                                    className="min-h-[120px]"
-                                    {...field}
-                                  />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          
-                          <FormField
-                            control={providerForm.control}
-                            name="experience"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Experience (Optional)</FormLabel>
-                                <FormControl>
-                                  <Textarea
-                                    placeholder="Share your relevant experience and qualifications"
-                                    className="min-h-[100px]"
-                                    {...field}
-                                  />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          
-                          <Button 
-                            type="submit"
-                            disabled={updateProviderMutation.isPending}
-                          >
-                            {updateProviderMutation.isPending ? (
-                              <>
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                Saving...
-                              </>
-                            ) : (
-                              "Save Provider Settings"
-                            )}
-                          </Button>
-                        </form>
-                      </Form>
-                    )}
-                    
-                    {user?.role === "service_provider" && !providerProfile && (
-                      <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
-                        <h3 className="font-medium text-blue-900 dark:text-blue-100 mb-2">
-                          Complete Your Provider Profile
-                        </h3>
-                        <p className="text-blue-700 dark:text-blue-300 text-sm">
-                          Complete the form above to set up your service provider profile and start offering your services to clients.
-                        </p>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </TabsContent>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            
+                            <FormField
+                              control={providerForm.control}
+                              name="bio"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Bio</FormLabel>
+                                  <FormControl>
+                                    <Textarea
+                                      placeholder="Describe your services and experience"
+                                      className="min-h-[120px]"
+                                      {...field}
+                                    />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            
+                            <FormField
+                              control={providerForm.control}
+                              name="experience"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Experience (Optional)</FormLabel>
+                                  <FormControl>
+                                    <Textarea
+                                      placeholder="Share your relevant experience and qualifications"
+                                      className="min-h-[100px]"
+                                      {...field}
+                                    />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            
+                            <Button 
+                              type="submit"
+                              disabled={updateProviderMutation.isPending}
+                            >
+                              {updateProviderMutation.isPending ? (
+                                <>
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                  Saving...
+                                </>
+                              ) : (
+                                "Save Provider Settings"
+                              )}
+                            </Button>
+                          </form>
+                        </Form>
+                      )}
+                      
+                      {user?.role === "service_provider" && !providerProfile && (
+                        <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
+                          <h3 className="font-medium text-blue-900 dark:text-blue-100 mb-2">
+                            Complete Your Provider Profile
+                          </h3>
+                          <p className="text-blue-700 dark:text-blue-300 text-sm">
+                            Complete the form above to set up your service provider profile and start offering your services to clients.
+                          </p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+              )}
 
               {user?.role === "service_provider" && (
                 <TabsContent value="documents" className="mt-0">
@@ -527,6 +541,30 @@ export default function ProfilePage() {
                           <div className="mt-2 text-xs text-gray-400">
                             Debug: Provider Profile Data: {JSON.stringify(providerProfile)}
                           </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                </TabsContent>
+              )}
+
+              {user?.role === "service_provider" && (
+                <TabsContent value="payment" className="mt-0">
+                  {providerLoading ? (
+                    <Card>
+                      <CardContent className="p-6">
+                        <div className="flex justify-center py-8">
+                          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ) : providerProfile ? (
+                    <BankAccountSetup />
+                  ) : (
+                    <Card>
+                      <CardContent className="p-6">
+                        <div className="text-center text-gray-500">
+                          Please complete your provider profile first to access payment setup.
                         </div>
                       </CardContent>
                     </Card>

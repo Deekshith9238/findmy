@@ -1,10 +1,8 @@
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StatusBar } from 'expo-status-bar';
-import { Ionicons } from '@expo/vector-icons';
 
 // Contexts
 import { AuthProvider } from './src/contexts/AuthContext';
@@ -13,60 +11,17 @@ import { NotificationProvider } from './src/contexts/NotificationContext';
 
 // Screens
 import AuthScreen from './src/screens/AuthScreen';
-import HomeScreen from './src/screens/HomeScreen';
-import ServicesScreen from './src/screens/ServicesScreen';
-import TasksScreen from './src/screens/TasksScreen';
-import MapScreen from './src/screens/MapScreen';
-import ProfileScreen from './src/screens/ProfileScreen';
 import CreateTaskScreen from './src/screens/CreateTaskScreen';
 import TaskDetailScreen from './src/screens/TaskDetailScreen';
 import ServiceProviderDetailScreen from './src/screens/ServiceProviderDetailScreen';
 import NotificationsScreen from './src/screens/NotificationsScreen';
-import PaymentApproverScreen from './src/screens/PaymentApproverScreen';
 
 // Components
 import ProtectedRoute from './src/components/ProtectedRoute';
+import RoleBasedNavigation from './src/components/RoleBasedNavigation';
 
 const Stack = createStackNavigator();
-const Tab = createBottomTabNavigator();
 const queryClient = new QueryClient();
-
-function MainTabs() {
-  return (
-    <Tab.Navigator
-      screenOptions={({ route }) => ({
-        tabBarIcon: ({ focused, color, size }) => {
-          let iconName: keyof typeof Ionicons.glyphMap;
-
-          if (route.name === 'Home') {
-            iconName = focused ? 'home' : 'home-outline';
-          } else if (route.name === 'Services') {
-            iconName = focused ? 'list' : 'list-outline';
-          } else if (route.name === 'Tasks') {
-            iconName = focused ? 'clipboard' : 'clipboard-outline';
-          } else if (route.name === 'Map') {
-            iconName = focused ? 'map' : 'map-outline';
-          } else if (route.name === 'Profile') {
-            iconName = focused ? 'person' : 'person-outline';
-          } else {
-            iconName = 'home-outline';
-          }
-
-          return <Ionicons name={iconName} size={size} color={color} />;
-        },
-        tabBarActiveTintColor: '#3B82F6',
-        tabBarInactiveTintColor: 'gray',
-        headerShown: false,
-      })}
-    >
-      <Tab.Screen name="Home" component={HomeScreen} />
-      <Tab.Screen name="Services" component={ServicesScreen} />
-      <Tab.Screen name="Tasks" component={TasksScreen} />
-      <Tab.Screen name="Map" component={MapScreen} />
-      <Tab.Screen name="Profile" component={ProfileScreen} />
-    </Tab.Navigator>
-  );
-}
 
 function AppNavigator() {
   return (
@@ -76,7 +31,7 @@ function AppNavigator() {
         <Stack.Screen name="Main">
           {() => (
             <ProtectedRoute>
-              <MainTabs />
+              <RoleBasedNavigation />
             </ProtectedRoute>
           )}
         </Stack.Screen>
@@ -113,15 +68,6 @@ function AppNavigator() {
           options={{ 
             headerShown: true, 
             title: 'Notifications',
-            headerBackTitleVisible: false 
-          }}
-        />
-        <Stack.Screen 
-          name="PaymentApprover" 
-          component={PaymentApproverScreen}
-          options={{ 
-            headerShown: true, 
-            title: 'Payment Approver',
             headerBackTitleVisible: false 
           }}
         />

@@ -11,7 +11,7 @@ import {
   Platform,
   ActivityIndicator,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+// import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../contexts/AuthContext';
 import { LoginCredentials, RegisterData } from '../types';
 
@@ -32,7 +32,7 @@ const AuthScreen: React.FC = () => {
   const { login, register } = useAuth();
 
   const handleLogin = async () => {
-    if (!formData.username || !formData.password) {
+    if (!formData.email || !formData.password) {
       Alert.alert('Error', 'Please fill in all required fields');
       return;
     }
@@ -40,7 +40,7 @@ const AuthScreen: React.FC = () => {
     try {
       setIsLoading(true);
       const credentials: LoginCredentials = {
-        username: formData.username,
+        email: formData.email,
         password: formData.password,
       };
       await login(credentials);
@@ -97,7 +97,7 @@ const AuthScreen: React.FC = () => {
     >
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         <View style={styles.header}>
-          <Ionicons name="home" size={48} color="#3B82F6" />
+          <Text style={styles.homeIcon}>🏠</Text>
           <Text style={styles.title}>Findmyhelper</Text>
           <Text style={styles.subtitle}>
             {isLogin ? 'Welcome back!' : 'Create your account'}
@@ -107,23 +107,23 @@ const AuthScreen: React.FC = () => {
         <View style={styles.form}>
           <TextInput
             style={styles.input}
-            placeholder="Username"
-            value={formData.username}
-            onChangeText={(value) => updateFormData('username', value)}
+            placeholder="Email"
+            value={formData.email}
+            onChangeText={(value) => updateFormData('email', value)}
             autoCapitalize="none"
             autoCorrect={false}
+            keyboardType="email-address"
           />
 
           {!isLogin && (
             <>
               <TextInput
                 style={styles.input}
-                placeholder="Email"
-                value={formData.email}
-                onChangeText={(value) => updateFormData('email', value)}
+                placeholder="Username"
+                value={formData.username}
+                onChangeText={(value) => updateFormData('username', value)}
                 autoCapitalize="none"
                 autoCorrect={false}
-                keyboardType="email-address"
               />
 
               <View style={styles.row}>
@@ -159,16 +159,11 @@ const AuthScreen: React.FC = () => {
                     ]}
                     onPress={() => updateFormData('role', 'client')}
                   >
-                    <Ionicons 
-                      name="person" 
-                      size={20} 
-                      color={formData.role === 'client' ? '#fff' : '#3B82F6'} 
-                    />
                     <Text style={[
                       styles.roleButtonText,
                       formData.role === 'client' && styles.roleButtonTextActive
                     ]}>
-                      Find Services
+                      👥 Find Services
                     </Text>
                   </TouchableOpacity>
 
@@ -179,16 +174,11 @@ const AuthScreen: React.FC = () => {
                     ]}
                     onPress={() => updateFormData('role', 'service_provider')}
                   >
-                    <Ionicons 
-                      name="hammer" 
-                      size={20} 
-                      color={formData.role === 'service_provider' ? '#fff' : '#3B82F6'} 
-                    />
                     <Text style={[
                       styles.roleButtonText,
                       formData.role === 'service_provider' && styles.roleButtonTextActive
                     ]}>
-                      Provide Services
+                      🛠️ Provide Services
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -259,6 +249,10 @@ const styles = StyleSheet.create({
   header: {
     alignItems: 'center',
     marginBottom: 40,
+  },
+  homeIcon: {
+    fontSize: 40,
+    marginBottom: 10,
   },
   title: {
     fontSize: 32,

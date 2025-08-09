@@ -6,8 +6,11 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import HomePage from "@/pages/home-page";
 import AuthPage from "@/pages/auth-page";
+import ForgotPassword from "@/pages/forgot-password";
 import ClientDashboard from "@/pages/client-dashboard";
 import ProviderDashboard from "@/pages/provider-dashboard";
+import ServiceVerifierDashboard from "@/pages/service-verifier-dashboard";
+import CallCenterDashboard from "@/pages/call-center-dashboard";
 import ServiceCategories from "@/pages/service-categories";
 import ServiceProviderProfile from "@/pages/service-provider-profile";
 import ProfilePage from "@/pages/profile-page";
@@ -29,6 +32,7 @@ function Router() {
     <Switch>
       <Route path="/" component={HomePage} />
       <Route path="/auth" component={() => <AuthPage />} />
+      <Route path="/forgot-password" component={ForgotPassword} />
       <Route path="/otp-auth" component={OTPLogin} />
       <Route path="/service-categories" component={ServiceCategories} />
       <Route path="/provider/:id" component={ServiceProviderProfile} />
@@ -37,6 +41,8 @@ function Router() {
       <ProtectedRoute path="/create-task" component={CreateTaskPage} />
       <ProtectedRoute path="/client-dashboard" component={ClientDashboard} />
       <ProtectedRoute path="/provider-dashboard" component={ProviderDashboard} />
+      <ProtectedRoute path="/service-verifier-dashboard" component={ServiceVerifierDashboard} />
+      <ProtectedRoute path="/call-center-dashboard" component={CallCenterDashboard} />
       <ProtectedRoute path="/admin-dashboard" component={AdminDashboard} />
       <ProtectedRoute path="/admin/users" component={AdminUserManagement} />
       <ProtectedRoute path="/profile" component={ProfilePage} />

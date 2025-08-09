@@ -7,9 +7,9 @@ const getApiBaseUrl = () => {
   if (__DEV__) {
     // Development URLs - connects to same backend as web app
     if (Platform.OS === 'ios') {
-      return 'http://localhost:5000/api';
+      return 'http://localhost:4000/api';
     } else {
-      return 'http://10.0.2.2:5000/api'; // Android emulator
+      return 'http://10.0.2.2:4000/api'; // Android emulator
     }
   } else {
     // Production URL - same backend as web app (replace with your Replit app URL)
@@ -25,53 +25,117 @@ let authCookie: string | null = null;
 export const apiRequest = async (endpoint: string, options: RequestInit = {}) => {
   const url = `${API_BASE_URL}${endpoint}`;
   
-  // Get stored auth cookie
-  if (!authCookie) {
-    authCookie = await SecureStore.getItemAsync('auth-cookie');
+  // Always get the latest auth cookie from storage
+  authCookie = await SecureStore.getItemAsync('auth-cookie');
+
+  // Clean up any duplicate cookies that might exist
+  if (authCookie && authCookie.includes(',')) {
+    console.log('Found duplicate cookies, cleaning up...');
+    // Take only the first cookie
+    const firstCookie = authCookie.split(',')[0].trim();
+    authCookie = firstCookie;
+    await SecureStore.setItemAsync('auth-cookie', authCookie);
+    console.log('Cleaned cookie stored:', authCookie);
+  }
+
+  console.log(`API Request [${endpoint}]:`, {
+    url,
+    cookie: authCookie ? 'Present' : 'Missing',
+    cookieValue: authCookie,
+    // Add debugging to see if there are multiple cookies
+    hasMultipleCookies: authCookie ? authCookie.includes(',') : false
+  });
+
+  // Create headers object, ensuring we don't duplicate cookies
+  const headers: HeadersInit = {
+    'Content-Type': 'application/json',
+    ...options.headers,
+  };
+
+  // Add cookie if available, but don't append to existing headers
+  if (authCookie) {
+    (headers as Record<string, string>)['Cookie'] = authCookie;
   }
 
   const config: RequestInit = {
     ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(authCookie && { 'Cookie': authCookie }),
-      ...options.headers,
-    },
+    headers,
     credentials: 'include',
   };
 
   try {
     const response = await fetch(url, config);
     
-    // Handle authentication cookies
+    // Handle authentication cookies - parse the Set-Cookie header properly
     const setCookieHeader = response.headers.get('set-cookie');
     if (setCookieHeader) {
-      authCookie = setCookieHeader;
-      await SecureStore.setItemAsync('auth-cookie', setCookieHeader);
+      console.log('Set-Cookie header received:', setCookieHeader);
+      // Extract the session cookie from the Set-Cookie header
+      // Handle multiple cookies by splitting and finding the session cookie
+      const cookies = setCookieHeader.split(',').map(cookie => cookie.trim());
+      let sessionCookie = null;
+      
+      for (const cookie of cookies) {
+        const sessionMatch = cookie.match(/connect\.sid=[^;]+/);
+        if (sessionMatch) {
+          // Only store the cookie value, not the full header
+          sessionCookie = sessionMatch[0];
+          break; // Take the first session cookie found
+        }
+      }
+      
+      if (sessionCookie) {
+        authCookie = sessionCookie;
+        await SecureStore.setItemAsync('auth-cookie', authCookie);
+        console.log('Session cookie stored:', authCookie);
+      } else {
+        console.log('No session cookie found in Set-Cookie header');
+      }
     }
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ message: 'Network error' }));
-      throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+      const error = new Error(errorData.message || `HTTP error! status: ${response.status}`);
+      
+      // Log the request details for debugging
+      console.log(`API Request failed [${endpoint}]:`, {
+        status: response.status,
+        cookie: authCookie ? 'Present' : 'Missing',
+        cookieValue: authCookie,
+        error: errorData.message
+      });
+      
+      // Don't log authentication errors as they're expected for unauthenticated users
+      if (response.status === 401 || response.status === 403) {
+        throw error;
+      }
+      
+      console.error(`API Error [${endpoint}]:`, error);
+      throw error;
     }
 
     return await response.json();
   } catch (error) {
-    console.error(`API Error [${endpoint}]:`, error);
+    // Only log non-authentication errors
+    if (error instanceof Error && 
+        !error.message.includes('Not authenticated') && 
+        !error.message.includes('You must be logged in')) {
+      console.error(`API Error [${endpoint}]:`, error);
+    }
     throw error;
   }
 };
 
 // Authentication API calls
 export const authApi = {
-  login: (credentials: { username: string; password: string }) =>
-    apiRequest('/auth/login', {
+  login: (credentials: { email: string; password: string }) =>
+    apiRequest('/login', {
       method: 'POST',
       body: JSON.stringify(credentials),
     }),
 
   register: (userData: any) =>
-    apiRequest('/auth/register', {
+    apiRequest('/register', {
       method: 'POST',
       body: JSON.stringify(userData),
     }),
@@ -89,13 +153,13 @@ export const authApi = {
 export const userApi = {
   getProfile: () => apiRequest('/user'),
   updateProfile: (data: any) =>
-    apiRequest('/user', {
+    apiRequest('/user/profile', {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
 
   updateProviderProfile: (data: any) =>
-    apiRequest('/user/provider', {
+    apiRequest('/providers/me', {
       method: 'PUT',
       body: JSON.stringify(data),
     }),

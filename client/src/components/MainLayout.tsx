@@ -49,7 +49,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
 
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center space-x-6">
-            {!isAdmin && (
+            {!isAdmin && user?.role !== 'service_verifier' && (
               <>
                 <Link href="/service-categories" className="font-medium hover:text-primary transition-colors">
                   Services
@@ -69,6 +69,10 @@ export default function MainLayout({ children }: MainLayoutProps) {
                 ) : user.role === 'payment_approver' ? (
                   <Link href="/payment-approver-dashboard" className="font-medium hover:text-primary transition-colors">
                     Dashboard
+                  </Link>
+                ) : user.role === 'service_verifier' ? (
+                  <Link href="/service-verifier-dashboard" className="font-medium hover:text-primary transition-colors">
+                    Verification Dashboard
                   </Link>
                 ) : isProvider ? (
                   <Link href="/provider-dashboard" className="font-medium hover:text-primary transition-colors">
@@ -143,7 +147,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
                   <Link href="/" className="font-medium hover:text-primary transition-colors" onClick={() => setMobileMenuOpen(false)}>
                     Home
                   </Link>
-                  {!isAdmin && (
+                  {!isAdmin && user?.role !== 'service_verifier' && (
                     <Link href="/service-categories" className="font-medium hover:text-primary transition-colors" onClick={() => setMobileMenuOpen(false)}>
                       Services
                     </Link>
@@ -158,6 +162,10 @@ export default function MainLayout({ children }: MainLayoutProps) {
                       ) : user.role === 'payment_approver' ? (
                         <Link href="/payment-approver-dashboard" className="font-medium hover:text-primary transition-colors" onClick={() => setMobileMenuOpen(false)}>
                           Dashboard
+                        </Link>
+                      ) : user.role === 'service_verifier' ? (
+                        <Link href="/service-verifier-dashboard" className="font-medium hover:text-primary transition-colors" onClick={() => setMobileMenuOpen(false)}>
+                          Verification Dashboard
                         </Link>
                       ) : isProvider ? (
                         <Link href="/provider-dashboard" className="font-medium hover:text-primary transition-colors" onClick={() => setMobileMenuOpen(false)}>

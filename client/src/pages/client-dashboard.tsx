@@ -31,6 +31,18 @@ export default function ClientDashboard() {
     enabled: !!user,
   });
 
+  // Fetch client tasks
+  const { data: tasks, isLoading: tasksLoading } = useQuery<any[]>({
+    queryKey: ["/api/tasks/client"],
+    enabled: !!user,
+  });
+
+  // Fetch client service requests
+  const { data: serviceRequests, isLoading: requestsLoading } = useQuery<any[]>({
+    queryKey: ["/api/service-requests/client"],
+    enabled: !!user,
+  });
+
   // Mutation for updating request status
   const updateRequestMutation = useMutation({
     mutationFn: async ({ id, status }: { id: number; status: string }) => {
@@ -105,11 +117,13 @@ export default function ClientDashboard() {
                     Create Work Order
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="sm:max-w-[550px]">
-                  <DialogHeader>
+                <DialogContent className="sm:max-w-[550px] max-h-[70vh] overflow-hidden flex flex-col">
+                  <DialogHeader className="flex-shrink-0">
                     <DialogTitle>Create New Work Order</DialogTitle>
                   </DialogHeader>
+                  <div className="flex-1 overflow-y-auto">
                   <CreateTaskForm onSuccess={handleCloseDialog} />
+                  </div>
                 </DialogContent>
               </Dialog>
             </div>

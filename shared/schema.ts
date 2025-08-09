@@ -357,6 +357,9 @@ export const tasks = pgTable("tasks", {
   latitude: doublePrecision("latitude"),
   longitude: doublePrecision("longitude"),
   budget: doublePrecision("budget"),
+  toolsRequired: text("tools_required"), // Tools required for the job
+  estimatedHours: integer("estimated_hours"), // Number of hours required for the job
+  skillsRequired: text("skills_required"), // Skills required for the task
   status: text("status").notNull().default("open"),
   createdAt: timestamp("created_at").defaultNow(),
   completedAt: timestamp("completed_at"),
@@ -456,6 +459,39 @@ export const jobBids = pgTable("job_bids", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Task Quotes (3-stage approval system)
+export const taskQuotes = pgTable("task_quotes", {
+  id: serial("id").primaryKey(),
+  taskId: integer("task_id").notNull().references(() => tasks.id),
+  providerId: integer("provider_id").notNull().references(() => serviceProviders.id),
+  
+  // Quote details
+  quoteAmount: doublePrecision("quote_amount").notNull(),
+  estimatedHours: integer("estimated_hours").notNull(),
+  message: text("message").notNull(),
+  toolsProvided: text("tools_provided"),
+  additionalServices: text("additional_services"),
+  
+  // 3-stage approval status
+  priceApproved: boolean("price_approved").default(false),
+  priceApprovedAt: timestamp("price_approved_at"),
+  priceApprovedBy: integer("price_approved_by").references(() => users.id),
+  
+  taskReviewed: boolean("task_reviewed").default(false),
+  taskReviewedAt: timestamp("task_reviewed_at"),
+  taskReviewedBy: integer("task_reviewed_by").references(() => users.id),
+  
+  customerDetailsReleased: boolean("customer_details_released").default(false),
+  customerDetailsReleasedAt: timestamp("customer_details_released_at"),
+  customerDetailsReleasedBy: integer("customer_details_released_by").references(() => users.id),
+  
+  // Overall status
+  status: text("status").notNull().default("pending"), // pending, price_approved, task_reviewed, customer_details_released, completed, rejected
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Provider Skills (for better job matching)
 export const providerSkills = pgTable("provider_skills", {
   id: serial("id").primaryKey(),
@@ -506,6 +542,33 @@ export const jobBidsRelations = relations(jobBids, ({ one }) => ({
   provider: one(serviceProviders, {
     fields: [jobBids.providerId],
     references: [serviceProviders.id],
+  }),
+}));
+
+// Task Quotes Relations
+export const taskQuotesRelations = relations(taskQuotes, ({ one }) => ({
+  task: one(tasks, {
+    fields: [taskQuotes.taskId],
+    references: [tasks.id],
+  }),
+  provider: one(serviceProviders, {
+    fields: [taskQuotes.providerId],
+    references: [serviceProviders.id],
+  }),
+  priceApprover: one(users, {
+    fields: [taskQuotes.priceApprovedBy],
+    references: [users.id],
+    relationName: 'priceApprover',
+  }),
+  taskReviewer: one(users, {
+    fields: [taskQuotes.taskReviewedBy],
+    references: [users.id],
+    relationName: 'taskReviewer',
+  }),
+  customerDetailsReleaser: one(users, {
+    fields: [taskQuotes.customerDetailsReleasedBy],
+    references: [users.id],
+    relationName: 'customerDetailsReleaser',
   }),
 }));
 
@@ -650,6 +713,22 @@ export const insertJobBidSchema = createInsertSchema(jobBids).omit({
   matchScore: true
 });
 
+export const insertTaskQuoteSchema = createInsertSchema(taskQuotes).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  priceApproved: true,
+  priceApprovedAt: true,
+  priceApprovedBy: true,
+  taskReviewed: true,
+  taskReviewedAt: true,
+  taskReviewedBy: true,
+  customerDetailsReleased: true,
+  customerDetailsReleasedAt: true,
+  customerDetailsReleasedBy: true,
+  status: true
+});
+
 export const insertProviderSkillSchema = createInsertSchema(providerSkills).omit({
   id: true,
   createdAt: true
@@ -758,6 +837,9 @@ export type WorkOrder = typeof workOrders.$inferSelect;
 
 export type InsertJobBid = z.infer<typeof insertJobBidSchema>;
 export type JobBid = typeof jobBids.$inferSelect;
+
+export type InsertTaskQuote = z.infer<typeof insertTaskQuoteSchema>;
+export type TaskQuote = typeof taskQuotes.$inferSelect;
 
 export type InsertProviderSkill = z.infer<typeof insertProviderSkillSchema>;
 export type ProviderSkill = typeof providerSkills.$inferSelect;

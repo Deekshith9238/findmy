@@ -297,7 +297,7 @@ export default function ServiceProviderProfile() {
       
       {/* Service Request Dialog */}
       <Dialog open={requestDialogOpen} onOpenChange={setRequestDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Request Service</DialogTitle>
             <DialogDescription>

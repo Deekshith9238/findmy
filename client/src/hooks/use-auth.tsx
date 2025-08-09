@@ -60,6 +60,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLocation("/admin-dashboard");
       } else if (user.role === "payment_approver") {
         setLocation("/payment-approver-dashboard");
+      } else if (user.role === "service_verifier") {
+        setLocation("/service-verifier-dashboard");
+      } else if (user.role === "call_center") {
+        setLocation("/call-center-dashboard");
       } else if (user.role === "service_provider") {
         setLocation("/provider-dashboard");
       } else {
@@ -103,6 +107,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLocation("/admin-dashboard");
       } else if (data.role === "payment_approver") {
         setLocation("/payment-approver-dashboard");
+      } else if (data.role === "service_verifier") {
+        setLocation("/service-verifier-dashboard");
       } else if (data.role === "service_provider") {
         setLocation("/provider-dashboard");
       } else {

@@ -10,6 +10,8 @@ import { FileText, Upload, Check, X, Clock, AlertCircle } from "lucide-react";
 import { uploadFile } from "@/lib/upload";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import DocumentCropper from "./DocumentCropper";
+import { readFile } from "@/lib/cropImage";
 
 interface Document {
   id: number;
@@ -40,6 +42,10 @@ const documentTypes = [
 export default function DocumentVerification({ providerId }: DocumentVerificationProps) {
   const [selectedType, setSelectedType] = useState("");
   const [isUploading, setIsUploading] = useState(false);
+  const [showCropper, setShowCropper] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [reuploadDocumentId, setReuploadDocumentId] = useState<number | null>(null);
   const { toast } = useToast();
 
   // Fetch documents
@@ -75,6 +81,8 @@ export default function DocumentVerification({ providerId }: DocumentVerificatio
         description: "Your document has been uploaded and is pending verification.",
       });
       setSelectedType("");
+      setSelectedFile(null);
+      setSelectedImage(null);
     },
     onError: (error: Error) => {
       toast({
@@ -85,11 +93,178 @@ export default function DocumentVerification({ providerId }: DocumentVerificatio
     },
   });
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  // Reupload document mutation
+  const reuploadMutation = useMutation({
+    mutationFn: async (data: { file: File; documentId: number; documentType: string }) => {
+      const { file, documentId, documentType } = data;
+      
+      // Upload file
+      const uploadResult = await uploadFile(file, 'document');
+      if (!uploadResult.success) {
+        throw new Error(uploadResult.error);
+      }
+
+      // Update document in database
+      const res = await apiRequest("PUT", `/api/provider/documents/${documentId}`, {
+        documentUrl: uploadResult.url,
+        originalName: file.name,
+        verificationStatus: 'pending', // Reset to pending
+        notes: null, // Clear previous notes
+      });
+      
+      return await res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/user/provider/documents"] });
+      // Also invalidate pending verification queries for service verifiers
+      queryClient.invalidateQueries({ queryKey: ["/api/providers/pending-verification"] });
+      toast({
+        title: "Document reuploaded",
+        description: "Your document has been reuploaded and is pending verification.",
+      });
+      setSelectedType("");
+      setSelectedFile(null);
+      setSelectedImage(null);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Reupload failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file || !selectedType) return;
 
-    uploadMutation.mutate({ file, documentType: selectedType });
+    console.log('Document file selected:', file.name, file.size, file.type);
+
+    try {
+      // Validate file size
+      const maxSize = 5 * 1024 * 1024; // 5MB for documents
+      if (file.size > maxSize) {
+        toast({
+          title: "File too large",
+          description: "Document must be less than 5MB",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Check if it's an image that needs cropping
+      const isImage = file.type.startsWith('image/');
+      
+      if (isImage) {
+        // For images, show cropper
+        console.log('Image document selected, showing cropper');
+        const imageDataUrl = await readFile(file);
+        setSelectedImage(imageDataUrl);
+        setSelectedFile(file);
+        setShowCropper(true);
+      } else {
+        // For PDFs and other files, upload directly
+        console.log('Non-image document, uploading directly');
+        uploadMutation.mutate({ file, documentType: selectedType });
+      }
+    } catch (error) {
+      console.error('Error handling file selection:', error);
+      toast({
+        title: "Error reading file",
+        description: "Failed to read the selected file",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleCropComplete = async (croppedImageUrl: string) => {
+    if (!selectedFile) return;
+    
+    setIsUploading(true);
+    try {
+      // Convert cropped image to file
+      const response = await fetch(croppedImageUrl);
+      const blob = await response.blob();
+      const file = new File([blob], selectedFile.name, { type: selectedFile.type });
+      
+      // Upload the cropped image
+      await uploadMutation.mutateAsync({ file, documentType: selectedType });
+    } catch (error) {
+      console.error('Error uploading cropped image:', error);
+      toast({
+        title: "Upload failed",
+        description: "Failed to upload the cropped image.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploading(false);
+      setShowCropper(false);
+    }
+  };
+
+  const handleReuploadFileSelect = async (event: React.ChangeEvent<HTMLInputElement>, documentId: number, documentType: string) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    console.log('Reupload file selected:', file.name, file.size, file.type);
+
+    // Check if file is an image
+    if (file.type.startsWith('image/')) {
+      try {
+        const imageUrl = await readFile(file);
+        setSelectedImage(imageUrl);
+        setSelectedFile(file);
+        setShowCropper(true);
+        
+        // Store document info for reupload
+        setSelectedType(documentType);
+        setReuploadDocumentId(documentId);
+      } catch (error) {
+        console.error('Error reading image file:', error);
+        toast({
+          title: "File error",
+          description: "Failed to read the image file.",
+          variant: "destructive",
+        });
+      }
+    } else {
+      // For non-image files, upload directly
+      try {
+        await reuploadMutation.mutateAsync({ file, documentId, documentType });
+      } catch (error) {
+        console.error('Error reuploading file:', error);
+      }
+    }
+    
+    // Clear the input
+    event.target.value = '';
+  };
+
+  const handleReuploadCropComplete = async (croppedImageUrl: string) => {
+    if (!selectedFile || !reuploadDocumentId) return;
+    
+    setIsUploading(true);
+    try {
+      // Convert cropped image to file
+      const response = await fetch(croppedImageUrl);
+      const blob = await response.blob();
+      const file = new File([blob], selectedFile.name, { type: selectedFile.type });
+      
+      // Reupload the cropped image
+      await reuploadMutation.mutateAsync({ file, documentId: reuploadDocumentId, documentType: selectedType });
+    } catch (error) {
+      console.error('Error reuploading cropped image:', error);
+      toast({
+        title: "Reupload failed",
+        description: "Failed to reupload the cropped image.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploading(false);
+      setShowCropper(false);
+      setReuploadDocumentId(null);
+    }
   };
 
   const getStatusIcon = (status: string) => {
@@ -203,11 +378,11 @@ export default function DocumentVerification({ providerId }: DocumentVerificatio
             
             <Button
               variant="outline"
-              disabled={!selectedType || uploadMutation.isPending}
+              disabled={!selectedType || uploadMutation.isPending || isUploading}
               onClick={() => document.getElementById('document-upload')?.click()}
             >
               <Upload className="w-4 h-4 mr-2" />
-              {uploadMutation.isPending ? "Uploading..." : "Upload Document"}
+              {uploadMutation.isPending || isUploading ? "Uploading..." : "Upload Document"}
             </Button>
           </div>
           
@@ -215,7 +390,7 @@ export default function DocumentVerification({ providerId }: DocumentVerificatio
             id="document-upload"
             type="file"
             accept="image/*,.pdf"
-            onChange={handleFileUpload}
+            onChange={handleFileSelect}
             className="hidden"
           />
         </div>
@@ -256,6 +431,34 @@ export default function DocumentVerification({ providerId }: DocumentVerificatio
                     <strong>Notes:</strong> {doc.notes}
                   </div>
                 )}
+
+                {doc.verificationStatus === "rejected" && (
+                  <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                    <h5 className="font-medium text-red-900 mb-2">Document Rejected</h5>
+                    <p className="text-sm text-red-800 mb-2">
+                      This document was rejected by the verification team. Please reupload a corrected version.
+                    </p>
+                    <div className="flex gap-2">
+                      <Input
+                        id={`reupload-${doc.id}`}
+                        type="file"
+                        accept="image/*,.pdf"
+                        onChange={(e) => handleReuploadFileSelect(e, doc.id, doc.documentType)}
+                        className="hidden"
+                      />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => document.getElementById(`reupload-${doc.id}`)?.click()}
+                        disabled={reuploadMutation.isPending || isUploading}
+                        className="border-red-300 text-red-700 hover:bg-red-50"
+                      >
+                        <Upload className="w-4 h-4 mr-2" />
+                        {reuploadMutation.isPending || isUploading ? "Reuploading..." : "Reupload Document"}
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))
           ) : (
@@ -264,6 +467,23 @@ export default function DocumentVerification({ providerId }: DocumentVerificatio
             </div>
           )}
         </div>
+
+        {/* Document Cropper Modal */}
+        {selectedImage && selectedFile && (
+          <DocumentCropper
+            imageSrc={selectedImage}
+            isOpen={showCropper}
+            onClose={() => {
+              setShowCropper(false);
+              setSelectedImage(null);
+              setSelectedFile(null);
+              setReuploadDocumentId(null);
+            }}
+            onCropComplete={reuploadDocumentId ? handleReuploadCropComplete : handleCropComplete}
+            documentType={selectedType}
+            fileName={selectedFile.name}
+          />
+        )}
       </CardContent>
     </Card>
   );

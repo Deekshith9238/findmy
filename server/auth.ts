@@ -1,24 +1,24 @@
 import * as crypto from 'crypto';
 import { storage } from './storage';
+import { sendOTPEmail } from './email';
 
 // Generate 6-digit OTP
 export function generateOTP(): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
-// Send OTP via email (mock implementation - replace with real email service)
-export async function sendOTPEmail(email: string, otp: string, purpose: string): Promise<boolean> {
+// Send OTP via email (now using real email service)
+export async function sendOTPEmailToUser(email: string, otp: string, purpose: string): Promise<boolean> {
   try {
-    // TODO: Replace with real email service (SendGrid, AWS SES, etc.)
-    console.log(`📧 Sending OTP to ${email}: ${otp} (Purpose: ${purpose})`);
+    const success = await sendOTPEmail(email, otp, purpose);
     
-    // Mock email sending - always succeeds in development
-    // In production, integrate with:
-    // - SendGrid: sgMail.send({ to: email, subject: `Your OTP Code: ${otp}`, text: `Your verification code is: ${otp}` })
-    // - AWS SES: ses.sendEmail({ Destination: { ToAddresses: [email] }, Message: { Subject: { Data: `OTP: ${otp}` }, Body: { Text: { Data: `Your code: ${otp}` } } } })
-    // - Nodemailer: transporter.sendMail({ from: 'noreply@findmyhelper.com', to: email, subject: `OTP: ${otp}`, text: `Your verification code is: ${otp}` })
+    if (success) {
+      console.log(`📧 OTP sent successfully to ${email}: ${otp} (Purpose: ${purpose})`);
+    } else {
+      console.error(`❌ Failed to send OTP to ${email}`);
+    }
     
-    return true;
+    return success;
   } catch (error) {
     console.error('Failed to send OTP email:', error);
     return false;
@@ -39,7 +39,7 @@ export async function createOTP(email: string, purpose: 'email_verification' | '
     attempts: 0
   });
   
-  await sendOTPEmail(email, otpCode, purpose);
+  await sendOTPEmailToUser(email, otpCode, purpose);
   return otpCode;
 }
 

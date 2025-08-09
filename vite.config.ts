@@ -18,6 +18,14 @@ export default defineConfig({
         ]
       : []),
   ],
+  server: {
+    host: 'localhost',
+    port: 5173,
+    strictPort: true,
+    proxy: {
+      '/api': 'http://localhost:4000',
+    },
+  },
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "client", "src"),

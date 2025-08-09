@@ -1,50 +1,47 @@
-import type { Express } from "express";
-import { createServer, type Server } from "http";
-import { WebSocketServer, WebSocket } from "ws";
+import express, { Express, Request, Response, NextFunction } from "express";
 import session from "express-session";
 import passport from "passport";
-import MemoryStore from "memorystore";
-import { storage } from "./storage";
-import { createOTP, verifyOTP, hashPassword, verifyPassword } from "./auth";
-import { pool, db } from "./db";
-import { z } from "zod";
-import { serviceProviders } from "@shared/schema";
-import { eq } from "drizzle-orm";
-import { 
-  insertTaskSchema, 
-  insertServiceRequestSchema,
-  insertReviewSchema,
-  insertUserSchema,
-
-  insertPaymentApproverSchema,
-  insertNotificationSchema,
-  insertEscrowPaymentSchema,
-  insertWorkCompletionPhotoSchema,
-  insertProviderBankAccountSchema,
-  insertWorkOrderSchema,
-  insertJobBidSchema,
-  insertProviderSkillSchema,
-  insertProviderEquipmentSchema,
-  paymentStatuses,
-  userRoles,
-  jobTypes,
-  jobStatus
-} from "@shared/schema";
+import { Server, createServer } from "http";
+import { WebSocketServer } from "ws";
 import Stripe from "stripe";
-import type { Request, Response, NextFunction } from "express";
+import { z } from "zod";
+import { eq, and, desc } from "drizzle-orm";
+import cookieParser from "cookie-parser";
+import { storage } from "./storage";
+import { insertTaskSchema, insertServiceRequestSchema, insertReviewSchema, insertUserSchema, insertWorkOrderSchema } from "../shared/schema";
+import { verifyPassword, hashPassword, createOTP, verifyOTP } from "./auth";
+import { pool } from "./db";
 
-// Distance calculation utility for privacy protection
-function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371; // Radius of the Earth in kilometers
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = 
-    Math.sin(dLat/2) * Math.sin(dLat/2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
-    Math.sin(dLon/2) * Math.sin(dLon/2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-  return R * c; // Distance in kilometers
-}
+// Standard MemoryStore
+const MemoryStore = session.MemoryStore;
+const sessionStore = new MemoryStore();
+
+// Add debugging to the session store methods
+const originalGet = sessionStore.get.bind(sessionStore);
+sessionStore.get = function(sessionId: string, callback: any) {
+  console.log('🔍 MemoryStore get:', sessionId);
+  return originalGet(sessionId, (err: any, session: any) => {
+    console.log('🔍 MemoryStore get result:', {
+      sessionId,
+      error: err,
+      sessionFound: !!session,
+      sessionUser: session?.user?.id
+    });
+    callback(err, session);
+  });
+};
+
+const originalSet = sessionStore.set.bind(sessionStore);
+sessionStore.set = function(sessionId: string, session: any, callback: any) {
+  console.log('💾 MemoryStore set:', sessionId, 'user:', session.user?.id);
+  return originalSet(sessionId, session, callback);
+};
+
+const originalDestroy = sessionStore.destroy.bind(sessionStore);
+sessionStore.destroy = function(sessionId: string, callback: any) {
+  console.log('🗑️ MemoryStore destroy:', sessionId);
+  return originalDestroy(sessionId, callback);
+};
 
 // Initialize Stripe
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
@@ -52,26 +49,65 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
 });
 
 // Payment calculations
-const PLATFORM_FEE_PERCENTAGE = 0.15; // 15% platform fee
-const TAX_RATE = 0.08; // 8% tax rate
+const calculatePlatformFee = (amount: number): number => {
+  return Math.round(amount * 0.10); // 10% platform fee
+};
+
+const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+  const R = 6371; // Earth's radius in kilometers
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+};
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Initialize session middleware FIRST (critical for authentication)
-  const MemoryStoreSession = MemoryStore(session);
+  console.log('🔧 Initializing session middleware with store:', sessionStore.constructor.name);
+
+  // Add cookie-parser middleware before session middleware
+  app.use(cookieParser());
+
   app.use(session({
     secret: process.env.SESSION_SECRET || 'your-secret-key',
-    resave: false,
+    resave: true,
     saveUninitialized: true,
-    store: new MemoryStoreSession({
-      checkPeriod: 86400000 // prune expired entries every 24h
-    }),
-    cookie: { 
-      secure: false, 
-      maxAge: 24 * 60 * 60 * 1000, // 24 hours
-      httpOnly: false,  // Allow access from client
-      sameSite: 'lax'
-    }
+    store: sessionStore,
+    name: 'connect.sid', // Explicitly set cookie name
+    cookie: {
+      secure: false,
+      maxAge: 24 * 60 * 60 * 1000,
+      httpOnly: false,
+      sameSite: false,
+      path: '/'
+    },
+    // Add these options to ensure proper session handling
+    rolling: false,
+    unset: 'keep'
   }));
+  
+  console.log('✅ Session middleware initialized');
+
+  // Add session debugging middleware
+  app.use((req, res, next) => {
+    console.log('🔍 Request session info:', {
+      sessionId: req.sessionID,
+      hasSession: !!req.session,
+      hasUser: !!(req.session && req.session.user),
+      user: req.session?.user?.id,
+      cookie: req.headers.cookie ? 'Present' : 'Missing',
+      cookieValue: req.headers.cookie,
+      // Add more detailed cookie debugging
+      parsedCookies: req.cookies,
+      sessionCookie: req.cookies?.connect_sid || req.cookies?.['connect.sid'],
+      // Add debugging for session ID extraction
+      sessionIdFromCookie: req.cookies?.['connect.sid'] ? req.cookies['connect.sid'].split('.')[0].substring(2) : 'None'
+    });
+    next();
+  });
 
   // Initialize passport for session management
   app.use(passport.initialize());
@@ -92,9 +128,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // User authentication status endpoint
-  app.get('/api/user', (req, res) => {
+  app.get('/api/user', async (req, res) => {
+    console.log('Session check:', {
+      hasSession: !!req.session,
+      hasUser: !!(req.session && req.session.user),
+      sessionId: req.sessionID,
+      user: req.session?.user
+    });
+    
     if (req.session && req.session.user) {
-      res.json(req.session.user);
+      const user = await storage.getUser(req.session.user.id);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      res.json(user);
     } else {
       res.status(401).json({ message: "Not authenticated" });
     }
@@ -131,7 +178,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Verify OTP and complete registration
   app.post("/api/auth/verify-otp-register", async (req, res) => {
     try {
-      const { email, otp, password, firstName, lastName, role, username } = req.body;
+      const { email, otp, password, firstName, lastName, role, username, categoryId, hourlyRate, bio, yearsOfExperience, availability } = req.body;
       
       if (!email || !otp || !password || !firstName || !lastName || !username) {
         return res.status(400).json({ message: "All fields are required" });
@@ -163,6 +210,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const user = await storage.createUser(userData);
       
+      // If user is a service provider, create the provider profile
+      if (role === 'service_provider') {
+        console.log('Creating service provider profile for user:', user.id);
+        console.log('Provider data:', { categoryId, hourlyRate, bio, yearsOfExperience, availability });
+        
+        if (!categoryId || !hourlyRate) {
+          return res.status(400).json({ message: "Category and hourly rate are required for service providers" });
+        }
+
+        const providerData = {
+          userId: user.id,
+          categoryId: parseInt(categoryId),
+          hourlyRate: parseFloat(hourlyRate),
+          bio: bio || "",
+          yearsOfExperience: yearsOfExperience ? parseInt(yearsOfExperience) : null,
+          availability: availability || "",
+          rating: 0,
+          completedJobs: 0,
+          isVerified: false
+        };
+
+        console.log('Provider data to create:', providerData);
+        
+        try {
+          const createdProvider = await storage.createServiceProvider(providerData);
+          console.log('Provider profile created successfully:', createdProvider);
+        } catch (providerError) {
+          console.error('Error creating provider profile:', providerError);
+          // Don't fail the registration, just log the error
+        }
+      }
+      
       res.status(201).json({ 
         message: "Registration successful", 
         user: { 
@@ -176,6 +255,78 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('OTP registration error:', error);
       res.status(500).json({ message: "Registration failed" });
+    }
+  });
+
+  // Verify OTP for password reset
+  app.post("/api/auth/verify-otp", async (req, res) => {
+    try {
+      const { email, otp, purpose } = req.body;
+      
+      if (!email || !otp || !purpose) {
+        return res.status(400).json({ message: "Email, OTP, and purpose are required" });
+      }
+
+      if (!['email_verification', 'login_verification', 'password_reset'].includes(purpose)) {
+        return res.status(400).json({ message: "Invalid purpose" });
+      }
+
+      // Verify OTP
+      const otpResult = await verifyOTP(email, otp, purpose);
+      if (!otpResult.success) {
+        return res.status(400).json({ message: otpResult.message });
+      }
+
+      res.json({ 
+        message: "OTP verified successfully",
+        success: true
+      });
+    } catch (error) {
+      console.error('OTP verification error:', error);
+      res.status(500).json({ message: "OTP verification failed" });
+    }
+  });
+
+  // Reset password
+  app.post("/api/auth/reset-password", async (req, res) => {
+    try {
+      const { email, otp, newPassword } = req.body;
+      
+      if (!email || !otp || !newPassword) {
+        return res.status(400).json({ message: "Email, OTP, and new password are required" });
+      }
+
+      // Verify OTP for password reset
+      const otpResult = await verifyOTP(email, otp, 'password_reset');
+      if (!otpResult.success) {
+        return res.status(400).json({ message: otpResult.message });
+      }
+
+      // Check if user exists
+      const user = await storage.getUserByEmail(email);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Hash new password
+      const hashedPassword = hashPassword(newPassword);
+      
+      // Update user password
+      const updatedUser = await storage.updateUser(user.id, {
+        password: hashedPassword
+      });
+      
+      if (!updatedUser) {
+        return res.status(500).json({ message: "Failed to update password" });
+      }
+      
+      res.json({ 
+        message: "Password reset successfully",
+        success: true
+      });
+    } catch (error) {
+      console.error('Password reset error:', error);
+      res.status(500).json({ message: "Password reset failed" });
     }
   });
 
@@ -249,18 +400,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { email, password } = req.body;
       
+      console.log('Login attempt:', { email, passwordLength: password?.length });
+      
       if (!email || !password) {
         return res.status(400).json({ message: "Email and password are required" });
       }
 
       // Check if user exists
       const user = await storage.getUserByEmail(email);
+      console.log('User lookup result:', { 
+        found: !!user, 
+        userId: user?.id, 
+        hasPassword: !!user?.password,
+        passwordLength: user?.password?.length 
+      });
+      
       if (!user) {
         return res.status(401).json({ message: "Invalid credentials" });
       }
 
       // Verify password
-      if (!verifyPassword(password, user.password)) {
+      const passwordValid = verifyPassword(password, user.password);
+      console.log('Password verification:', { 
+        passwordValid, 
+        inputPasswordLength: password.length,
+        storedPasswordLength: user.password.length 
+      });
+      
+      if (!passwordValid) {
         return res.status(401).json({ message: "Invalid credentials" });
       }
 
@@ -283,6 +450,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.error('Session save error:', err);
           return res.status(500).json({ message: "Session save failed" });
         }
+        
+        console.log('Login session created:', {
+          sessionId: req.sessionID,
+          user: req.session.user,
+          cookie: req.session.cookie
+        });
         
         res.json({ 
           id: user.id, 
@@ -512,6 +685,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     req.user = req.session.user;
 
+    console.log('=== /api/providers/me PUT route hit ===');
+    console.log('User ID:', req.user.id);
+    console.log('User role:', req.user.role);
+    console.log('Request body:', req.body);
+
     if (!req.session || !req.session.user) {
       return res.status(401).json({ message: "You must be logged in" });
     }
@@ -525,9 +703,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Category, hourly rate, and bio are required" });
       }
       
+      console.log('Looking for service provider for user ID:', req.user.id);
       const serviceProvider = await storage.getServiceProviderByUserId(req.user.id);
+      console.log('Service provider found:', serviceProvider);
+      
       if (!serviceProvider) {
-        return res.status(404).json({ message: "Service provider profile not found" });
+        console.log('No service provider found for user ID:', req.user.id);
+        
+        // Try to create a provider profile if it doesn't exist
+        try {
+          console.log('Attempting to create provider profile for user:', req.user.id);
+          const newProviderData = {
+            userId: req.user.id,
+            categoryId: parseInt(categoryId),
+            hourlyRate: parseFloat(hourlyRate),
+            bio: bio || "",
+            yearsOfExperience: experience ? parseInt(experience) : null,
+            availability: "",
+            rating: 0,
+            completedJobs: 0,
+            isVerified: false
+          };
+          
+          const createdProvider = await storage.createServiceProvider(newProviderData);
+          console.log('Provider profile created successfully:', createdProvider);
+          
+          res.json(createdProvider);
+          return;
+        } catch (createError) {
+          console.error('Failed to create provider profile:', createError);
+          return res.status(404).json({ message: "Service provider profile not found and could not be created" });
+        }
       }
       
       const updatedProvider = await storage.updateServiceProvider(serviceProvider.id, {
@@ -537,10 +743,202 @@ export async function registerRoutes(app: Express): Promise<Server> {
         yearsOfExperience: experience ? parseInt(experience) : null
       });
       
+      console.log('Provider updated successfully:', updatedProvider);
       res.json(updatedProvider);
     } catch (error) {
       console.error('Error updating service provider profile:', error);
       res.status(500).json({ message: "Failed to update service provider profile" });
+    }
+  });
+
+  // Get providers pending verification
+  app.get("/api/providers/pending-verification", async (req, res) => {
+    if (!req.session || !req.session.user) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+    req.user = req.session.user;
+    
+    if (req.user.role !== 'service_verifier' && req.user.role !== 'admin') {
+      return res.status(403).json({ message: "Access denied" });
+    }
+    
+    try {
+      console.log('🔍 Fetching providers pending verification...');
+      
+      // Step 1: Get all providers
+      const providers = await storage.getServiceProviders();
+      console.log('📊 Total providers found:', providers.length);
+      
+      // Step 2: Filter providers who have pending documents OR pending overall status
+      const providersWithPendingDocs = [];
+      
+      for (const provider of providers) {
+        // Get documents for this provider
+        const documents = await storage.getServiceProviderDocuments(provider.id);
+        
+        // Check if provider has any pending documents OR overall status is pending
+        const hasPendingDocuments = documents.some(doc => doc.verificationStatus === 'pending');
+        const isOverallPending = provider.verificationStatus === 'pending';
+        
+        
+        if (hasPendingDocuments || isOverallPending) {
+          providersWithPendingDocs.push(provider);
+          console.log(`📋 Provider ${provider.id} has pending documents or status: ${hasPendingDocuments ? 'pending docs' : ''} ${isOverallPending ? 'pending status' : ''}`);
+        }
+      }
+      
+      console.log('📋 Providers with pending documents/status found:', providersWithPendingDocs.length);
+      
+      // Step 3: Get basic data for each provider with pending items
+      const result = [];
+      
+      for (const provider of providersWithPendingDocs) {
+        try {
+          console.log(`🔍 Processing provider ${provider.id}...`);
+          
+          // Get user
+          const user = await storage.getUser(provider.userId);
+          console.log(`👤 User for provider ${provider.id}:`, user ? 'Found' : 'Not found');
+          
+          // Get category
+          const category = await storage.getServiceCategory(provider.categoryId);
+          console.log(`📂 Category for provider ${provider.id}:`, category ? 'Found' : 'Not found');
+          
+          // Get documents
+          const documents = await storage.getServiceProviderDocuments(provider.id);
+          console.log(`📄 Documents for provider ${provider.id}:`, documents.length);
+          
+          if (user) {
+            result.push({
+              id: provider.id,
+              userId: provider.userId,
+              categoryId: provider.categoryId,
+              hourlyRate: provider.hourlyRate,
+              bio: provider.bio,
+              yearsOfExperience: provider.yearsOfExperience,
+              availability: provider.availability,
+              rating: provider.rating,
+              completedJobs: provider.completedJobs,
+              verificationStatus: provider.verificationStatus,
+              verifiedBy: provider.verifiedBy,
+              verifiedAt: provider.verifiedAt,
+              rejectionReason: provider.rejectionReason,
+              createdAt: provider.createdAt,
+              updatedAt: provider.updatedAt,
+              user: {
+                id: user.id,
+                firstName: user.firstName,
+                lastName: user.lastName,
+                email: user.email,
+                role: user.role
+              },
+              category: category ? {
+                id: category.id,
+                name: category.name,
+                description: category.description,
+                icon: category.icon
+              } : null,
+              documents: documents.map(doc => ({
+                id: doc.id,
+                providerId: doc.providerId,
+                documentType: doc.documentType,
+                documentUrl: doc.documentUrl,
+                originalName: doc.originalName,
+                uploadedAt: doc.uploadedAt,
+                verificationStatus: doc.verificationStatus,
+                verifiedBy: doc.verifiedBy,
+                verifiedAt: doc.verifiedAt,
+                notes: doc.notes
+              }))
+            });
+            
+            console.log(`✅ Successfully processed provider ${provider.id}`);
+          } else {
+            console.log(`❌ Skipping provider ${provider.id} - user not found`);
+          }
+          
+        } catch (error) {
+          console.error(`❌ Error processing provider ${provider.id}:`, error);
+          // Continue with other providers
+        }
+      }
+      
+      console.log(`📋 Returning ${result.length} processed providers`);
+      res.json(result);
+      
+    } catch (error) {
+      console.error('❌ Error in pending verification endpoint:', error);
+      console.error('Error stack:', error.stack);
+      res.status(500).json({ 
+        message: "Failed to fetch pending providers", 
+        error: error.message,
+        stack: error.stack 
+      });
+    }
+  });
+
+  // Get recently verified providers
+  app.get("/api/providers/recently-verified", async (req, res) => {
+    if (!req.session || !req.session.user) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+    req.user = req.session.user;
+    
+    if (req.user.role !== 'service_verifier' && req.user.role !== 'admin') {
+      return res.status(403).json({ message: "Access denied" });
+    }
+    
+    try {
+      console.log('🔍 Fetching recently verified providers...');
+      
+      // Get providers verified in the last 7 days
+      const providers = await storage.getServiceProviders();
+      console.log('📋 Total providers found:', providers.length);
+      
+      // Debug: Log all providers and their verification status
+      providers.forEach(p => {
+        console.log(`Provider ${p.id}: status=${p.verificationStatus}, verifiedAt=${p.verifiedAt}`);
+      });
+      
+      const recentlyVerified = [];
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      console.log('📅 Seven days ago:', sevenDaysAgo);
+      
+      for (const provider of providers) {
+        if (provider.verificationStatus === 'verified' && 
+            provider.verifiedAt && 
+            new Date(provider.verifiedAt) >= sevenDaysAgo) {
+          console.log(`✅ Found recently verified provider: ${provider.id}`);
+          try {
+            const user = await storage.getUser(provider.userId);
+            
+            if (user) {
+              recentlyVerified.push({
+                id: provider.id,
+                userId: provider.userId,
+                verificationStatus: provider.verificationStatus,
+                verifiedAt: provider.verifiedAt,
+                user: {
+                  id: user.id,
+                  firstName: user.firstName,
+                  lastName: user.lastName,
+                  email: user.email
+                }
+              });
+            }
+          } catch (error) {
+            console.error(`Error processing verified provider ${provider.id}:`, error);
+            // Continue with other providers
+          }
+        }
+      }
+      
+      console.log(`📋 Returning ${recentlyVerified.length} recently verified providers`);
+      res.json(recentlyVerified);
+    } catch (error) {
+      console.error('❌ Error in recently verified endpoint:', error);
+      res.status(500).json({ message: "Failed to fetch recently verified providers" });
     }
   });
   
@@ -702,6 +1100,298 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(updatedTask);
     } catch (err) {
       res.status(500).json({ message: "Failed to update task" });
+    }
+  });
+
+  // ========== TASK QUOTES ROUTES (3-Stage Approval System) ==========
+
+  // Submit a quote for a task
+  app.post("/api/tasks/:id/quotes", async (req, res) => {
+    if (!req.session || !req.session.user) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+    req.user = req.session.user;
+
+    try {
+      if (req.user.role !== 'service_provider') {
+        return res.status(403).json({ message: "Only service providers can submit quotes" });
+      }
+
+      const taskId = parseInt(req.params.id);
+      const task = await storage.getTask(taskId);
+      
+      if (!task) {
+        return res.status(404).json({ message: "Task not found" });
+      }
+
+      const serviceProvider = await storage.getServiceProviderByUserId(req.user.id);
+      if (!serviceProvider) {
+        return res.status(404).json({ message: "Service provider profile not found" });
+      }
+
+      // Check if provider already submitted a quote for this task
+      const existingQuote = await storage.getTaskQuoteByTaskAndProvider(taskId, serviceProvider.id);
+      if (existingQuote) {
+        return res.status(400).json({ message: "You have already submitted a quote for this task" });
+      }
+
+      const quoteData = {
+        taskId,
+        providerId: serviceProvider.id,
+        quoteAmount: req.body.quoteAmount,
+        estimatedHours: req.body.estimatedHours,
+        message: req.body.message,
+        toolsProvided: req.body.toolsProvided,
+        additionalServices: req.body.additionalServices,
+      };
+
+      const quote = await storage.createTaskQuote(quoteData);
+
+      // Create notification for client
+      const notification = await storage.createNotification({
+        userId: task.clientId,
+        type: 'quote_submitted',
+        title: 'New Quote Received',
+        message: `A service provider has submitted a quote for your task: "${task.title}"`,
+        data: JSON.stringify({ taskId, quoteId: quote.id })
+      });
+
+      await sendNotificationToUser(task.clientId, notification);
+
+      res.status(201).json(quote);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ 
+          message: "Validation error", 
+          errors: err.errors 
+        });
+      }
+      res.status(500).json({ message: "Failed to submit quote" });
+    }
+  });
+
+  // Get quotes for a task (client can see all quotes, provider can only see their own)
+  app.get("/api/tasks/:id/quotes", async (req, res) => {
+    if (!req.session || !req.session.user) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+    req.user = req.session.user;
+
+    try {
+      const taskId = parseInt(req.params.id);
+      const task = await storage.getTask(taskId);
+      
+      if (!task) {
+        return res.status(404).json({ message: "Task not found" });
+      }
+
+      let quotes;
+      if (req.user.role === 'client' && task.clientId === req.user.id) {
+        // Client can see all quotes for their task
+        quotes = await storage.getTaskQuotesByTask(taskId);
+      } else if (req.user.role === 'service_provider') {
+        // Provider can only see their own quote
+        const serviceProvider = await storage.getServiceProviderByUserId(req.user.id);
+        if (!serviceProvider) {
+          return res.status(404).json({ message: "Service provider profile not found" });
+        }
+        const quote = await storage.getTaskQuoteByTaskAndProvider(taskId, serviceProvider.id);
+        quotes = quote ? [quote] : [];
+      } else {
+        return res.status(403).json({ message: "Not authorized to view quotes for this task" });
+      }
+
+      res.json(quotes);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch quotes" });
+    }
+  });
+
+  // Stage 1: Approve price
+  app.post("/api/tasks/:id/quotes/approve-price", async (req, res) => {
+    if (!req.session || !req.session.user) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+    req.user = req.session.user;
+
+    try {
+      const taskId = parseInt(req.params.id);
+      const task = await storage.getTask(taskId);
+      
+      if (!task) {
+        return res.status(404).json({ message: "Task not found" });
+      }
+
+      // Only client can approve price
+      if (req.user.role !== 'client' || task.clientId !== req.user.id) {
+        return res.status(403).json({ message: "Only the task owner can approve quotes" });
+      }
+
+      // Get all quotes for this task and find the one to approve
+      const quotes = await storage.getTaskQuotesByTask(taskId);
+      if (quotes.length === 0) {
+        return res.status(404).json({ message: "No quotes found for this task" });
+      }
+
+      // For now, approve the first quote (you can add logic to select specific quote)
+      const quote = quotes[0];
+      const serviceProvider = await storage.getServiceProvider(quote.providerId);
+      if (!serviceProvider) {
+        return res.status(404).json({ message: "Service provider not found" });
+      }
+
+      const updatedQuote = await storage.updateTaskQuote(quote.id, {
+        priceApproved: true,
+        priceApprovedAt: new Date(),
+        priceApprovedBy: req.user.id,
+        status: 'price_approved'
+      });
+
+      // Create notification for provider
+      const notification = await storage.createNotification({
+        userId: serviceProvider.userId,
+        type: 'quote_price_approved',
+        title: 'Quote Price Approved',
+        message: `Your quote price for task "${task.title}" has been approved. Awaiting task review.`,
+        data: JSON.stringify({ taskId, quoteId: quote.id })
+      });
+
+      await sendNotificationToUser(serviceProvider.userId, notification);
+
+      res.json(updatedQuote);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to approve price" });
+    }
+  });
+
+  // Stage 2: Approve task review
+  app.post("/api/tasks/:id/quotes/approve-task", async (req, res) => {
+    if (!req.session || !req.session.user) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+    req.user = req.session.user;
+
+    try {
+      const taskId = parseInt(req.params.id);
+      const task = await storage.getTask(taskId);
+      
+      if (!task) {
+        return res.status(404).json({ message: "Task not found" });
+      }
+
+      // Only client can approve task review
+      if (req.user.role !== 'client' || task.clientId !== req.user.id) {
+        return res.status(403).json({ message: "Only the task owner can approve task review" });
+      }
+
+      // Get all quotes for this task and find the one to approve
+      const quotes = await storage.getTaskQuotesByTask(taskId);
+      if (quotes.length === 0) {
+        return res.status(404).json({ message: "No quotes found for this task" });
+      }
+
+      // For now, approve the first quote that has price approved
+      const quote = quotes.find(q => q.priceApproved);
+      if (!quote) {
+        return res.status(400).json({ message: "No quotes with approved price found" });
+      }
+
+      const serviceProvider = await storage.getServiceProvider(quote.providerId);
+      if (!serviceProvider) {
+        return res.status(404).json({ message: "Service provider not found" });
+      }
+
+      const updatedQuote = await storage.updateTaskQuote(quote.id, {
+        taskReviewed: true,
+        taskReviewedAt: new Date(),
+        taskReviewedBy: req.user.id,
+        status: 'task_reviewed'
+      });
+
+      // Create notification for provider
+      const notification = await storage.createNotification({
+        userId: serviceProvider.userId,
+        type: 'quote_task_approved',
+        title: 'Task Review Approved',
+        message: `Your task review for "${task.title}" has been approved. Awaiting customer details release.`,
+        data: JSON.stringify({ taskId, quoteId: quote.id })
+      });
+
+      await sendNotificationToUser(serviceProvider.userId, notification);
+
+      res.json(updatedQuote);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to approve task review" });
+    }
+  });
+
+  // Stage 3: Release customer details
+  app.post("/api/tasks/:id/quotes/release-customer-details", async (req, res) => {
+    if (!req.session || !req.session.user) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+    req.user = req.session.user;
+
+    try {
+      const taskId = parseInt(req.params.id);
+      const task = await storage.getTask(taskId);
+      
+      if (!task) {
+        return res.status(404).json({ message: "Task not found" });
+      }
+
+      // Only client can release customer details
+      if (req.user.role !== 'client' || task.clientId !== req.user.id) {
+        return res.status(403).json({ message: "Only the task owner can release customer details" });
+      }
+
+      // Get all quotes for this task and find the one to approve
+      const quotes = await storage.getTaskQuotesByTask(taskId);
+      if (quotes.length === 0) {
+        return res.status(404).json({ message: "No quotes found for this task" });
+      }
+
+      // For now, approve the first quote that has price and task review approved
+      const quote = quotes.find(q => q.priceApproved && q.taskReviewed);
+      if (!quote) {
+        return res.status(400).json({ message: "No quotes with approved price and task review found" });
+      }
+
+      const serviceProvider = await storage.getServiceProvider(quote.providerId);
+      if (!serviceProvider) {
+        return res.status(404).json({ message: "Service provider not found" });
+      }
+
+      const updatedQuote = await storage.updateTaskQuote(quote.id, {
+        customerDetailsReleased: true,
+        customerDetailsReleasedAt: new Date(),
+        customerDetailsReleasedBy: req.user.id,
+        status: 'customer_details_released'
+      });
+
+      // Create notification for provider with customer details
+      const notification = await storage.createNotification({
+        userId: serviceProvider.userId,
+        type: 'customer_details_released',
+        title: 'Customer Details Released',
+        message: `Customer details for task "${task.title}" have been released. You can now contact the customer. Work must commence within 24 hours.`,
+        data: JSON.stringify({ 
+          taskId, 
+          quoteId: quote.id,
+          customerDetails: {
+            name: `${req.user.firstName} ${req.user.lastName}`,
+            phone: req.user.phoneNumber,
+            email: req.user.email,
+            address: task.location
+          }
+        })
+      });
+
+      await sendNotificationToUser(serviceProvider.userId, notification);
+
+      res.json(updatedQuote);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to release customer details" });
     }
   });
 
@@ -1057,24 +1747,80 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     try {
       const { providerId, documentType, documentUrl, originalName } = req.body;
-      
+
       // Check if user owns this provider profile
       const provider = await storage.getServiceProvider(providerId);
       if (!provider || provider.userId !== req.user.id) {
         return res.status(403).json({ message: "Access denied" });
       }
-      
+
       const document = await storage.createServiceProviderDocument({
         providerId,
         documentType,
         documentUrl,
         originalName,
-        verificationStatus: "pending"
+        verificationStatus: 'pending'
       });
-      
-      res.status(201).json(document);
+
+      res.json(document);
     } catch (err) {
       res.status(500).json({ message: "Failed to upload document" });
+    }
+  });
+
+  // Update provider document (for reuploads)
+  app.put("/api/provider/documents/:documentId", async (req, res) => {
+    if (!req.session || !req.session.user) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+    req.user = req.session.user;
+
+    try {
+      const documentId = parseInt(req.params.documentId);
+      const { documentUrl, originalName, verificationStatus, notes } = req.body;
+
+      console.log('🔄 Document reupload request:', {
+        documentId,
+        verificationStatus,
+        originalName,
+        hasNewUrl: !!documentUrl
+      });
+
+      // Get the document to check ownership
+      const document = await storage.getServiceProviderDocument(documentId);
+      if (!document) {
+        console.log('❌ Document not found:', documentId);
+        return res.status(404).json({ message: "Document not found" });
+      }
+
+      console.log('📄 Current document status:', document.verificationStatus);
+
+      // Check if user owns this document
+      const provider = await storage.getServiceProvider(document.providerId);
+      if (!provider || provider.userId !== req.user.id) {
+        console.log('❌ Access denied for document:', documentId);
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      const updatedDocument = await storage.updateServiceProviderDocument(documentId, {
+        documentUrl,
+        originalName,
+        verificationStatus,
+        notes,
+        verifiedBy: null, // Clear previous verification
+        verifiedAt: null
+      });
+
+      console.log('✅ Document updated successfully:', {
+        documentId,
+        newStatus: updatedDocument?.verificationStatus,
+        providerId: document.providerId
+      });
+
+      res.json(updatedDocument);
+    } catch (err) {
+      console.error('❌ Error updating document:', err);
+      res.status(500).json({ message: "Failed to update document" });
     }
   });
 
@@ -1180,6 +1926,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(updatedDocument);
     } catch (err) {
       res.status(500).json({ message: "Failed to verify document" });
+    }
+  });
+
+  // Serve document (for viewing base64 documents)
+  app.get("/api/documents/:documentId/view", async (req, res) => {
+    if (!req.session || !req.session.user) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+    req.user = req.session.user;
+
+    try {
+      const documentId = parseInt(req.params.documentId);
+      
+      // Get document from database
+      const document = await storage.getServiceProviderDocument(documentId);
+      if (!document) {
+        return res.status(404).json({ message: "Document not found" });
+      }
+
+      // Get provider to check permissions
+      const provider = await storage.getServiceProvider(document.providerId);
+      if (!provider) {
+        return res.status(404).json({ message: "Provider not found" });
+      }
+
+      // Check if user has permission to view this document
+      if (provider.userId !== req.user.id && !['admin', 'service_verifier'].includes(req.user.role)) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      // Check if document URL is a base64 data URL
+      if (!document.documentUrl || !document.documentUrl.startsWith('data:')) {
+        return res.status(404).json({ message: "Document not available" });
+      }
+
+      // Extract content type and base64 data
+      const matches = document.documentUrl.match(/^data:([^;]+);base64,(.+)$/);
+      if (!matches) {
+        return res.status(400).json({ message: "Invalid document format" });
+      }
+
+      const [, contentType, base64Data] = matches;
+      
+      // Convert base64 to buffer
+      const buffer = Buffer.from(base64Data, 'base64');
+      
+      // Set appropriate headers
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Content-Length', buffer.length);
+      res.setHeader('Content-Disposition', `inline; filename="${document.originalName}"`);
+      
+      // Send the document
+      res.send(buffer);
+    } catch (err) {
+      console.error('Error serving document:', err);
+      res.status(500).json({ message: "Failed to serve document" });
     }
   });
 
@@ -1406,7 +2208,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Test user info endpoint 
   app.get("/api/test/user", async (req, res) => {
     if (!req.session || !req.session.user) {
-      return res.status(401).json({ message: "You must be logged in" });
+      return res.status(401).json({ message: "Not authenticated" });
     }
     req.user = req.session.user;
     res.json({ 
@@ -1415,6 +2217,126 @@ export async function registerRoutes(app: Express): Promise<Server> {
       userRole: req.user?.role,
       userExists: !!req.user
     });
+  });
+
+  // Debug endpoint to check and fix admin user
+  app.get("/api/debug/admin", async (req, res) => {
+    try {
+      const adminEmail = "findmyhelper2025@gmail.com";
+      const admin = await storage.getUserByEmail(adminEmail);
+      
+      if (!admin) {
+        return res.json({ 
+          message: "Admin user not found",
+          shouldCreate: true 
+        });
+      }
+      
+      // Check if password format is correct (should be salt:hash format)
+      const hasCorrectFormat = admin.password.includes(':');
+      
+      return res.json({
+        message: "Admin user found",
+        admin: {
+          id: admin.id,
+          email: admin.email,
+          role: admin.role,
+          hasCorrectPasswordFormat: hasCorrectFormat
+        },
+        shouldFixPassword: !hasCorrectFormat
+      });
+    } catch (error) {
+      console.error('Error checking admin user:', error);
+      res.status(500).json({ message: "Error checking admin user" });
+    }
+  });
+
+  // Reset admin user password endpoint
+  app.post("/api/debug/reset-admin", async (req, res) => {
+    try {
+      const adminEmail = "findmyhelper2025@gmail.com";
+      const admin = await storage.getUserByEmail(adminEmail);
+      
+      if (!admin) {
+        // Create admin user
+        const { hashPassword } = await import('./auth');
+        const password = "Fmh@2025";
+        const hashedPassword = hashPassword(password);
+        
+        await storage.createUser({
+          email: adminEmail,
+          username: "admin",
+          password: hashedPassword,
+          firstName: "Admin",
+          lastName: "User",
+          role: "admin",
+          isEmailVerified: true
+        });
+        
+        return res.json({ 
+          message: "Admin user created successfully",
+          credentials: {
+            email: adminEmail,
+            password: password
+          }
+        });
+      } else {
+        // Update existing admin password
+        const { hashPassword } = await import('./auth');
+        const password = "Fmh@2025";
+        const hashedPassword = hashPassword(password);
+        
+        await storage.updateUser(admin.id, {
+          password: hashedPassword,
+          isEmailVerified: true
+        });
+        
+        return res.json({ 
+          message: "Admin password reset successfully",
+          credentials: {
+            email: adminEmail,
+            password: password
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Error resetting admin user:', error);
+      res.status(500).json({ message: "Error resetting admin user" });
+    }
+  });
+
+  // Debug endpoint to fix admin user password
+  app.post("/api/debug/fix-admin", async (req, res) => {
+    try {
+      const adminEmail = "findmyhelper2025@gmail.com";
+      const admin = await storage.getUserByEmail(adminEmail);
+      
+      if (!admin) {
+        return res.status(404).json({ message: "Admin user not found" });
+      }
+      
+      // Import password hashing function
+      const { hashPassword } = await import('./auth');
+      
+      // Update admin password to correct format
+      const newPassword = "Fmh@2025";
+      const hashedPassword = hashPassword(newPassword);
+      
+      await storage.updateUser(admin.id, {
+        password: hashedPassword,
+        isEmailVerified: true
+      });
+      
+      res.json({ 
+        message: "Admin user password fixed successfully",
+        newPassword: "Fmh@2025"
+      });
+    } catch (error) {
+      res.status(500).json({ 
+        message: "Error fixing admin user",
+        error: error.message 
+      });
+    }
   });
 
   // Get current user's service provider profile
@@ -1480,6 +2402,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     req.user = req.session.user;
 
+    console.log('=== /api/providers/me PUT route hit ===');
+    console.log('User ID:', req.user.id);
+    console.log('User role:', req.user.role);
+    console.log('Request body:', req.body);
+
     if (!req.session || !req.session.user) {
       return res.status(401).json({ message: "You must be logged in" });
     }
@@ -1493,9 +2420,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Category, hourly rate, and bio are required" });
       }
       
+      console.log('Looking for service provider for user ID:', req.user.id);
       const serviceProvider = await storage.getServiceProviderByUserId(req.user.id);
+      console.log('Service provider found:', serviceProvider);
+      
       if (!serviceProvider) {
-        return res.status(404).json({ message: "Service provider profile not found" });
+        console.log('No service provider found for user ID:', req.user.id);
+        
+        // Try to create a provider profile if it doesn't exist
+        try {
+          console.log('Attempting to create provider profile for user:', req.user.id);
+          const newProviderData = {
+            userId: req.user.id,
+            categoryId: parseInt(categoryId),
+            hourlyRate: parseFloat(hourlyRate),
+            bio: bio || "",
+            yearsOfExperience: experience ? parseInt(experience) : null,
+            availability: "",
+            rating: 0,
+            completedJobs: 0,
+            isVerified: false
+          };
+          
+          const createdProvider = await storage.createServiceProvider(newProviderData);
+          console.log('Provider profile created successfully:', createdProvider);
+          
+          res.json(createdProvider);
+          return;
+        } catch (createError) {
+          console.error('Failed to create provider profile:', createError);
+          return res.status(404).json({ message: "Service provider profile not found and could not be created" });
+        }
       }
       
       const updatedProvider = await storage.updateServiceProvider(serviceProvider.id, {
@@ -1505,6 +2460,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         yearsOfExperience: experience ? parseInt(experience) : null
       });
       
+      console.log('Provider updated successfully:', updatedProvider);
       res.json(updatedProvider);
     } catch (error) {
       console.error('Error updating service provider profile:', error);
@@ -1968,15 +2924,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
             provider,
             photos
           };
-
-  // User authentication status endpoint
-  app.get('/api/user', (req, res) => {
-    if (req.session && req.session.user) {
-      res.json(req.session.user);
-    } else {
-      res.status(401).json({ message: "Not authenticated" });
-    }
-  });
         })
       );
 
@@ -2269,69 +3216,86 @@ export async function registerRoutes(app: Express): Promise<Server> {
     req.user = req.session.user;
 
     try {
+      console.log('🔍 Available work orders request from user:', req.user.id);
+      
       const provider = await storage.getServiceProviderByUserId(req.user!.id);
       if (!provider) {
+        console.log('❌ Provider profile not found for user:', req.user.id);
         return res.status(404).json({ message: "Provider profile not found" });
       }
 
-      const { lat, lng, radius = 25, category } = req.query;
-      const userLat = lat ? parseFloat(lat as string) : provider.user?.latitude;
-      const userLng = lng ? parseFloat(lng as string) : provider.user?.longitude;
+      console.log('✅ Provider found:', {
+        providerId: provider.id,
+        categoryId: provider.categoryId,
+        categoryName: provider.category?.name
+      });
 
-      let workOrders;
-      if (userLat && userLng) {
-        workOrders = await storage.getAvailableWorkOrdersByLocation(
-          userLat,
-          userLng,
-          parseInt(radius as string),
-          category ? parseInt(category as string) : undefined
-        );
-      } else {
-        workOrders = await storage.getAvailableWorkOrders(
-          category ? parseInt(category as string) : undefined
-        );
-      }
+      // Get all tasks that are open
+      const tasks = await storage.getTasks();
+      console.log('📊 Raw tasks found:', tasks.length);
+      
+      // Filter tasks that match provider's category and are open
+      const filteredTasks = tasks.filter(task => 
+        task.categoryId === provider.categoryId && 
+        task.status === 'open' &&
+        task.clientId !== req.user!.id
+      );
 
-      // Privacy protection: Remove sensitive client info for initial display
-      const protectedWorkOrders = workOrders.map(wo => ({
-        ...wo,
-        // Keep basic info
-        id: wo.id,
-        title: wo.title,
-        description: wo.description,
-        jobType: wo.jobType,
-        budget: wo.budget,
-        isBudgetFlexible: wo.isBudgetFlexible,
-        estimatedDuration: wo.estimatedDuration,
-        experienceLevel: wo.experienceLevel,
-        skillsRequired: wo.skillsRequired,
-        status: wo.status,
-        createdAt: wo.createdAt,
-        allowBidding: wo.allowBidding,
-        category: wo.category,
+      console.log('📋 Filtered tasks for provider:', filteredTasks.length);
+      filteredTasks.forEach((task, index) => {
+        console.log(`  ${index + 1}. ID: ${task.id}, Title: ${task.title}, Status: ${task.status}, Category: ${task.categoryId}`);
+      });
+
+      // Convert tasks to work order format
+      const workOrders = await Promise.all(filteredTasks.map(async (task) => {
+        const client = await storage.getUser(task.clientId);
+        const category = await storage.getServiceCategory(task.categoryId);
         
-        // Hide sensitive info until approval
-        siteAddress: "Address will be provided after acceptance",
-        clientPhoneNumber: "Contact info provided after acceptance",
-        clientEmail: "Contact info provided after acceptance",
-        
-        // Show only city/state, not full address
-        siteCity: wo.siteCity,
-        siteState: wo.siteState,
-        
-        // Hide client personal details
-        client: {
-          firstName: "Client",
-          lastName: "Name Hidden",
-          // Don't expose personal info
-        },
-        
-        // Calculate and show approximate distance only
-        distance: wo.distance ? Math.round(wo.distance) : null
+        return {
+          id: task.id,
+          title: task.title,
+          description: task.description || '',
+          jobType: 'task',
+          budget: task.budget || null,
+          isBudgetFlexible: false,
+          estimatedDuration: task.estimatedDuration || null,
+          experienceLevel: 'any',
+          skillsRequired: '',
+          status: task.status,
+          createdAt: task.createdAt,
+          allowBidding: true,
+          category: category ? {
+            id: category.id,
+            name: category.name,
+            description: category.description,
+            icon: category.icon
+          } : null,
+          
+          // Hide sensitive info until approval
+          siteAddress: "Address will be provided after acceptance",
+          clientPhoneNumber: "Contact info provided after acceptance",
+          clientEmail: "Contact info provided after acceptance",
+          
+          // Show only city/state, not full address
+          siteCity: task.location || 'Location TBD',
+          siteState: 'State TBD',
+          
+          // Hide client personal details
+          client: {
+            firstName: "Client",
+            lastName: "Name Hidden",
+            // Don't expose personal info
+          },
+          
+          // Calculate and show approximate distance only
+          distance: null
+        };
       }));
 
-      res.json(protectedWorkOrders);
+      console.log('✅ Returning work orders:', workOrders.length);
+      res.json(workOrders);
     } catch (error) {
+      console.error('❌ Error in available work orders endpoint:', error);
       res.status(500).json({ message: "Failed to fetch available work orders" });
     }
   });
@@ -2450,7 +3414,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Provider directly accepts work order (no bidding required)
+  // Provider accepts work order (creates service request for call center approval)
   app.post("/api/work-orders/:id/accept", async (req, res) => {
     if (!req.session || !req.session.user) {
       return res.status(401).json({ message: "You must be logged in" });
@@ -2465,32 +3429,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Provider profile not found" });
       }
 
-      const workOrder = await storage.getWorkOrder(workOrderId);
-      if (!workOrder) {
-        return res.status(404).json({ message: "Work order not found" });
+      // Get the task (since we're using tasks, not work orders)
+      const task = await storage.getTask(workOrderId);
+      if (!task) {
+        return res.status(404).json({ message: "Task not found" });
       }
 
-      if (workOrder.status !== 'open') {
-        return res.status(400).json({ message: "Work order is no longer available" });
+      if (task.status !== 'open') {
+        return res.status(400).json({ message: "Task is no longer available" });
       }
 
-      if (workOrder.assignedProviderId) {
-        return res.status(400).json({ message: "Work order already assigned" });
+      // Check if provider already has a pending request for this task
+      const existingRequest = await storage.getServiceRequestsByProvider(provider.id);
+      const hasPendingRequest = existingRequest.some(req => 
+        req.taskId === workOrderId && req.status === 'assigned_to_call_center'
+      );
+
+      if (hasPendingRequest) {
+        return res.status(400).json({ message: "You already have a pending request for this task" });
       }
 
-      // Assign work order directly to provider
-      await storage.updateWorkOrder(workOrderId, {
-        assignedProviderId: provider.id,
-        status: 'assigned'
-      });
-
-      // Create call center assignment for approval
-      const callCenterAssignment = await storage.createCallCenterAssignment({
-        workOrderId: workOrder.id,
+      // Create a service request that goes to call center for approval
+      const serviceRequest = await storage.createServiceRequest({
         providerId: provider.id,
-        status: 'pending_approval',
-        assignedAt: new Date(),
-        notes: `Provider ${provider.user.firstName} ${provider.user.lastName} accepted work order "${workOrder.title}"`
+        taskId: workOrderId,
+        clientId: task.clientId,
+        status: 'assigned_to_call_center', // This will be reviewed by call center
+        message: 'Provider interested in task - awaiting call center approval for client details'
       });
 
       // Notify call center staff for approval
@@ -2499,33 +3464,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const notification = await storage.createNotification({
           userId: staff.id,
           type: 'approval_needed',
-          title: 'Work Assignment Needs Approval',
-          message: `${provider.user.firstName} ${provider.user.lastName} wants to work on "${workOrder.title}" - Review and approve to release client details`,
-          data: JSON.stringify({ workOrderId, providerId: provider.id, assignmentId: callCenterAssignment.id })
+          title: 'Task Assignment Needs Approval',
+          message: `Provider ${provider.user?.firstName || 'Unknown'} ${provider.user?.lastName || 'Provider'} wants to work on "${task.title}" - Review and approve to release client details`,
+          data: JSON.stringify({ 
+            serviceRequestId: serviceRequest.id, 
+            taskId: workOrderId, 
+            providerId: provider.id 
+          })
         });
         
         await sendNotificationToUser(staff.id, notification);
       }
 
-      // Notify client about work acceptance (but not assigned yet)
+      // Notify client about provider interest (but not assigned yet)
       const clientNotification = await storage.createNotification({
-        userId: workOrder.clientId,
-        type: 'work_interest',
-        title: 'Provider Interested in Your Work Order',
-        message: `A qualified provider has shown interest in your work order "${workOrder.title}". We're reviewing the match and will notify you once approved.`,
-        data: JSON.stringify({ workOrderId, providerId: provider.id })
+        userId: task.clientId,
+        type: 'task_interest',
+        title: 'Provider Interested in Your Task',
+        message: `A qualified provider has shown interest in your task "${task.title}". We're reviewing the match and will notify you once approved.`,
+        data: JSON.stringify({ taskId: workOrderId, providerId: provider.id })
       });
       
-      await sendNotificationToUser(workOrder.clientId, clientNotification);
+      await sendNotificationToUser(task.clientId, clientNotification);
 
       res.json({ 
-        message: "Work interest submitted successfully. Awaiting call center approval for client details.", 
-        workOrderId,
+        message: "Task interest submitted successfully. Awaiting call center approval for client details.", 
+        taskId: workOrderId,
+        serviceRequestId: serviceRequest.id,
         status: 'pending_approval'
       });
     } catch (error) {
-      console.error('Work order acceptance error:', error);
-      res.status(500).json({ message: "Failed to accept work order" });
+      console.error('Task acceptance error:', error);
+      res.status(500).json({ message: "Failed to accept task" });
     }
   });
 
@@ -2824,6 +3794,949 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Status update error:', error);
       res.status(500).json({ message: "Failed to update status" });
+    }
+  });
+
+  // Update current user's profile
+  app.put("/api/user/profile", async (req, res) => {
+    if (!req.session || !req.session.user) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+    req.user = req.session.user;
+
+    try {
+      const { firstName, lastName, email, phoneNumber } = req.body;
+      const updatedUser = await storage.updateUser(req.user.id, {
+        firstName,
+        lastName,
+        email,
+        phoneNumber,
+      });
+
+      if (!updatedUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      res.json(updatedUser);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update profile", error: error.message });
+    }
+  });
+
+  // Get current user's provider profile with category details
+  app.get("/api/user/provider", async (req, res) => {
+    if (!req.session || !req.session.user) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+    req.user = req.session.user;
+
+    try {
+      const provider = await storage.getServiceProviderByUserId(req.user.id);
+      if (!provider) {
+        return res.status(404).json({ message: "Provider profile not found" });
+      }
+      
+      // Get category details
+      const category = await storage.getServiceCategory(provider.categoryId);
+      
+      // Combine provider data with category and user info
+      const providerWithDetails = {
+        ...provider,
+        category: category || null,
+        user: {
+          id: req.user.id,
+          firstName: req.user.firstName,
+          lastName: req.user.lastName,
+          email: req.user.email,
+          profilePicture: req.user.profilePicture
+        }
+      };
+      
+      res.json(providerWithDetails);
+    } catch (err) {
+      console.error('Error fetching provider profile:', err);
+      res.status(500).json({ message: "Failed to fetch provider profile" });
+    }
+  });
+
+  // Public admin reset endpoint (no authentication required)
+  app.get("/api/public/reset-admin", async (req, res) => {
+    try {
+      const adminEmail = "findmyhelper2025@gmail.com";
+      const admin = await storage.getUserByEmail(adminEmail);
+      
+      if (!admin) {
+        // Create admin user
+        const { hashPassword } = await import('./auth');
+        const password = "Fmh@2025";
+        const hashedPassword = hashPassword(password);
+        
+        await storage.createUser({
+          email: adminEmail,
+          username: "admin",
+          password: hashedPassword,
+          firstName: "Admin",
+          lastName: "User",
+          role: "admin",
+          isEmailVerified: true
+        });
+        
+        return res.json({ 
+          message: "Admin user created successfully",
+          credentials: {
+            email: adminEmail,
+            password: password
+          }
+        });
+      } else {
+        // Update existing admin password
+        const { hashPassword } = await import('./auth');
+        const password = "Fmh@2025";
+        const hashedPassword = hashPassword(password);
+        
+        await storage.updateUser(admin.id, {
+          password: hashedPassword,
+          isEmailVerified: true
+        });
+        
+        return res.json({ 
+          message: "Admin password reset successfully",
+          credentials: {
+            email: adminEmail,
+            password: password
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Error resetting admin user:', error);
+      res.status(500).json({ 
+        success: false,
+        message: "Error resetting admin user",
+        error: error.message 
+      });
+    }
+  });
+
+  // Service Verifier Dashboard Endpoints
+  
+  // Get recently verified providers
+  app.get("/api/providers/recently-verified", async (req, res) => {
+    if (!req.session || !req.session.user) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+    req.user = req.session.user;
+    
+    if (req.user.role !== 'service_verifier' && req.user.role !== 'admin') {
+      return res.status(403).json({ message: "Access denied" });
+    }
+    
+    try {
+      console.log('🔍 Fetching recently verified providers...');
+      
+      // Get providers verified in the last 7 days
+      const providers = await storage.getServiceProviders();
+      console.log('📋 Total providers found:', providers.length);
+      
+      // Debug: Log all providers and their verification status
+      providers.forEach(p => {
+        console.log(`Provider ${p.id}: status=${p.verificationStatus}, verifiedAt=${p.verifiedAt}`);
+      });
+      
+      const recentlyVerified = [];
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      console.log('📅 Seven days ago:', sevenDaysAgo);
+      
+      for (const provider of providers) {
+        if (provider.verificationStatus === 'verified' && 
+            provider.verifiedAt && 
+            new Date(provider.verifiedAt) >= sevenDaysAgo) {
+          console.log(`✅ Found recently verified provider: ${provider.id}`);
+          try {
+            const user = await storage.getUser(provider.userId);
+            
+            if (user) {
+              recentlyVerified.push({
+                id: provider.id,
+                userId: provider.userId,
+                verificationStatus: provider.verificationStatus,
+                verifiedAt: provider.verifiedAt,
+                user: {
+                  id: user.id,
+                  firstName: user.firstName,
+                  lastName: user.lastName,
+                  email: user.email
+                }
+              });
+            }
+          } catch (error) {
+            console.error(`Error processing verified provider ${provider.id}:`, error);
+            // Continue with other providers
+          }
+        }
+      }
+      
+      console.log(`📋 Returning ${recentlyVerified.length} recently verified providers`);
+      res.json(recentlyVerified);
+    } catch (error) {
+      console.error('❌ Error in recently verified endpoint:', error);
+      res.status(500).json({ message: "Failed to fetch recently verified providers" });
+    }
+  });
+
+  // Get verification statistics
+  app.get("/api/verification/stats", async (req, res) => {
+    if (!req.session || !req.session.user) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+    req.user = req.session.user;
+    
+    if (req.user.role !== 'service_verifier' && req.user.role !== 'admin') {
+      return res.status(403).json({ message: "Access denied" });
+    }
+    
+    try {
+      console.log('📊 Fetching verification statistics...');
+      
+      const providers = await storage.getServiceProviders();
+      console.log('📋 Total providers:', providers.length);
+      
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const stats = {
+        pending: providers.filter(p => p.verificationStatus === 'pending').length,
+        verifiedToday: providers.filter(p => 
+          p.verificationStatus === 'verified' && 
+          p.verifiedAt && 
+          new Date(p.verifiedAt) >= today
+        ).length,
+        totalVerified: providers.filter(p => p.verificationStatus === 'verified').length,
+        rejected: providers.filter(p => p.verificationStatus === 'rejected').length
+      };
+      
+      console.log('📈 Verification stats:', stats);
+      res.json(stats);
+    } catch (error) {
+      console.error('❌ Error fetching verification stats:', error);
+      res.status(500).json({ message: "Failed to fetch verification stats" });
+    }
+  });
+
+  // Update document verification status
+  app.put("/api/verification/documents/:id", async (req, res) => {
+    if (!req.session || !req.session.user) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+    req.user = req.session.user;
+    
+    if (req.user.role !== 'service_verifier' && req.user.role !== 'admin') {
+      return res.status(403).json({ message: "Access denied" });
+    }
+    
+    try {
+      const { id } = req.params;
+      const { verificationStatus, notes, verifiedBy, verifiedAt } = req.body;
+      
+      const updated = await storage.updateServiceProviderDocument(parseInt(id), {
+        verificationStatus,
+        notes,
+        verifiedBy,
+        verifiedAt: new Date(verifiedAt)
+      });
+      
+      if (!updated) {
+        return res.status(404).json({ message: "Document not found" });
+      }
+      
+      res.json(updated);
+    } catch (error) {
+      console.error('Error updating document verification:', error);
+      res.status(500).json({ message: "Failed to update document verification" });
+    }
+  });
+
+  // Update provider verification status
+  app.put("/api/providers/:id/verification", async (req, res) => {
+    if (!req.session || !req.session.user) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+    req.user = req.session.user;
+    
+    if (req.user.role !== 'service_verifier' && req.user.role !== 'admin') {
+      return res.status(403).json({ message: "Access denied" });
+    }
+    
+    try {
+      const { id } = req.params;
+      const { verificationStatus, rejectionReason, verifiedBy, verifiedAt } = req.body;
+      
+      const updated = await storage.updateServiceProvider(parseInt(id), {
+        verificationStatus,
+        rejectionReason,
+        verifiedBy,
+        verifiedAt: new Date(verifiedAt)
+      });
+      
+      if (!updated) {
+        return res.status(404).json({ message: "Provider not found" });
+      }
+      
+      res.json(updated);
+    } catch (error) {
+      console.error('Error updating provider verification:', error);
+      res.status(500).json({ message: "Failed to update provider verification" });
+    }
+  });
+
+  // Test endpoint to create a provider with pending verification (for testing)
+  app.post("/api/test/create-pending-provider", async (req, res) => {
+    if (!req.session || !req.session.user) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+    req.user = req.session.user;
+    
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+    
+    try {
+      // Create a test user
+      const testUser = await storage.createUser({
+        email: `test-provider-${Date.now()}@example.com`,
+        username: `testprovider${Date.now()}`,
+        password: 'hashedpassword',
+        firstName: 'Test',
+        lastName: 'Provider',
+        role: 'service_provider',
+        isEmailVerified: true
+      });
+      
+      // Create a test provider with pending verification
+      const testProvider = await storage.createServiceProvider({
+        userId: testUser.id,
+        categoryId: 1, // Assuming category 1 exists
+        hourlyRate: 25.0,
+        bio: 'Test provider for verification',
+        yearsOfExperience: 2,
+        availability: 'Weekdays',
+        verificationStatus: 'pending'
+      });
+      
+      // Create some test documents
+      await storage.createServiceProviderDocument({
+        providerId: testProvider.id,
+        documentType: 'identity',
+        documentUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+        originalName: 'test-id.png',
+        verificationStatus: 'pending'
+      });
+      
+      await storage.createServiceProviderDocument({
+        providerId: testProvider.id,
+        documentType: 'license',
+        documentUrl: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwA/8A',
+        originalName: 'test-license.jpg',
+        verificationStatus: 'pending'
+      });
+      
+      res.json({ 
+        message: 'Test provider created successfully',
+        provider: testProvider,
+        user: testUser
+      });
+    } catch (error) {
+      console.error('Error creating test provider:', error);
+      res.status(500).json({ message: "Failed to create test provider" });
+    }
+  });
+
+  // Debug endpoint to check raw database data
+  app.get("/api/debug/providers-raw", async (req, res) => {
+    if (!req.session || !req.session.user) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+    req.user = req.session.user;
+    
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+    
+    try {
+      const providers = await storage.getServiceProviders();
+      const users = await storage.getAllUsers();
+      const documents = await Promise.all(
+        providers.map(p => storage.getServiceProviderDocuments(p.id))
+      );
+      
+      res.json({
+        providers: providers.map(p => ({
+          id: p.id,
+          userId: p.userId,
+          verificationStatus: p.verificationStatus,
+          categoryId: p.categoryId
+        })),
+        users: users.map(u => ({
+          id: u.id,
+          firstName: u.firstName,
+          lastName: u.lastName,
+          email: u.email,
+          role: u.role
+        })),
+        documents: documents.flat().map(d => ({
+          id: d.id,
+          providerId: d.providerId,
+          documentType: d.documentType,
+          verificationStatus: d.verificationStatus
+        }))
+      });
+    } catch (error) {
+      console.error('Error fetching raw data:', error);
+      res.status(500).json({ message: "Failed to fetch raw data" });
+    }
+  });
+
+  // Simple test endpoint to check individual queries
+  app.get("/api/debug/test-queries", async (req, res) => {
+    if (!req.session || !req.session.user) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+    req.user = req.session.user;
+    
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+    
+    try {
+      console.log('🧪 Testing individual queries...');
+      
+      // Test 1: Get all providers
+      const providers = await storage.getServiceProviders();
+      console.log('✅ Providers query successful:', providers.length);
+      
+      // Test 2: Get first provider's user
+      if (providers.length > 0) {
+        const firstProvider = providers[0];
+        console.log('🔍 Testing with provider:', firstProvider.id);
+        
+        const user = await storage.getUser(firstProvider.userId);
+        console.log('✅ User query successful:', user ? 'User found' : 'User not found');
+        
+        const category = await storage.getServiceCategory(firstProvider.categoryId);
+        console.log('✅ Category query successful:', category ? 'Category found' : 'Category not found');
+        
+        const documents = await storage.getServiceProviderDocuments(firstProvider.id);
+        console.log('✅ Documents query successful:', documents.length, 'documents found');
+        
+        res.json({
+          success: true,
+          providerCount: providers.length,
+          firstProvider: {
+            id: firstProvider.id,
+            userId: firstProvider.userId,
+            categoryId: firstProvider.categoryId,
+            verificationStatus: firstProvider.verificationStatus,
+            hasUser: !!user,
+            hasCategory: !!category,
+            documentCount: documents.length
+          }
+        });
+      } else {
+        res.json({
+          success: true,
+          providerCount: 0,
+          message: 'No providers found'
+        });
+      }
+    } catch (error) {
+      console.error('❌ Test query failed:', error);
+      res.status(500).json({ 
+        success: false,
+        error: error.message,
+        stack: error.stack
+      });
+    }
+  });
+
+  // Simple test endpoint
+  app.get("/api/test-simple", async (req, res) => {
+    console.log('🧪 Simple test endpoint hit');
+    res.json({ message: "Test endpoint working", timestamp: new Date().toISOString() });
+  });
+
+  // Test endpoint to verify document serving
+  app.get("/api/test/document/:documentId", async (req, res) => {
+    try {
+      const documentId = parseInt(req.params.documentId);
+      
+      // Get document from database
+      const document = await storage.getServiceProviderDocument(documentId);
+      if (!document) {
+        return res.status(404).json({ message: "Document not found" });
+      }
+
+      res.json({
+        id: document.id,
+        documentType: document.documentType,
+        originalName: document.originalName,
+        hasDataUrl: document.documentUrl && document.documentUrl.startsWith('data:'),
+        urlLength: document.documentUrl ? document.documentUrl.length : 0
+      });
+    } catch (err) {
+      console.error('Error testing document:', err);
+      res.status(500).json({ message: "Failed to test document" });
+    }
+  });
+
+  // Test endpoint to verify a provider (for testing recently verified)
+  app.post("/api/test/verify-provider/:providerId", async (req, res) => {
+    if (!req.session || !req.session.user) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+    req.user = req.session.user;
+    
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+    
+    try {
+      const providerId = parseInt(req.params.providerId);
+      
+      // Update provider to verified status
+      const updatedProvider = await storage.updateServiceProvider(providerId, {
+        verificationStatus: 'verified',
+        verifiedBy: req.user.id,
+        verifiedAt: new Date()
+      });
+      
+      if (!updatedProvider) {
+        return res.status(404).json({ message: "Provider not found" });
+      }
+      
+      res.json({ 
+        message: 'Provider verified successfully',
+        provider: updatedProvider
+      });
+    } catch (error) {
+      console.error('Error verifying provider:', error);
+      res.status(500).json({ message: "Failed to verify provider" });
+    }
+  });
+
+  // Test endpoint to list all providers and their status
+  app.get("/api/test/providers-status", async (req, res) => {
+    if (!req.session || !req.session.user) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+    req.user = req.session.user;
+    
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+    
+    try {
+      const providers = await storage.getServiceProviders();
+      
+      const providersWithUser = await Promise.all(
+        providers.map(async (provider) => {
+          const user = await storage.getUser(provider.userId);
+          return {
+            id: provider.id,
+            userId: provider.userId,
+            verificationStatus: provider.verificationStatus,
+            verifiedAt: provider.verifiedAt,
+            verifiedBy: provider.verifiedBy,
+            user: user ? {
+              id: user.id,
+              firstName: user.firstName,
+              lastName: user.lastName,
+              email: user.email
+            } : null
+          };
+        })
+      );
+      
+      res.json({
+        totalProviders: providersWithUser.length,
+        providers: providersWithUser
+      });
+    } catch (error) {
+      console.error('Error listing providers:', error);
+      res.status(500).json({ message: "Failed to list providers" });
+    }
+  });
+
+  // Test endpoint to check document status
+  app.get("/api/test/document-status/:documentId", async (req, res) => {
+    if (!req.session || !req.session.user) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+    req.user = req.session.user;
+    
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+    
+    try {
+      const documentId = parseInt(req.params.documentId);
+      const document = await storage.getServiceProviderDocument(documentId);
+      
+      if (!document) {
+        return res.status(404).json({ message: "Document not found" });
+      }
+      
+      const provider = await storage.getServiceProvider(document.providerId);
+      
+      res.json({
+        document: {
+          id: document.id,
+          providerId: document.providerId,
+          documentType: document.documentType,
+          verificationStatus: document.verificationStatus,
+          verifiedBy: document.verifiedBy,
+          verifiedAt: document.verifiedAt,
+          notes: document.notes,
+          uploadedAt: document.uploadedAt
+        },
+        provider: provider ? {
+          id: provider.id,
+          userId: provider.userId,
+          verificationStatus: provider.verificationStatus,
+          verifiedBy: provider.verifiedBy,
+          verifiedAt: provider.verifiedAt
+        } : null
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Error checking document status", error: error.message });
+    }
+  });
+
+  // Get available tasks as work orders for providers (compatibility endpoint)
+  app.get("/api/work-orders/available", async (req, res) => {
+    if (!req.session || !req.session.user) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+    req.user = req.session.user;
+
+    try {
+      console.log('🔍 Available work orders request from user:', req.user.id);
+      
+      const provider = await storage.getServiceProviderByUserId(req.user!.id);
+      if (!provider) {
+        console.log('❌ Provider profile not found for user:', req.user.id);
+        return res.status(404).json({ message: "Provider profile not found" });
+      }
+
+      console.log('✅ Provider found:', {
+        providerId: provider.id,
+        categoryId: provider.categoryId,
+        categoryName: provider.category?.name
+      });
+
+      // Get all tasks that are open
+      const tasks = await storage.getTasks();
+      console.log('📊 Raw tasks found:', tasks.length);
+      
+      // Filter tasks that match provider's category and are open
+      const filteredTasks = tasks.filter(task => 
+        task.categoryId === provider.categoryId && 
+        task.status === 'open' &&
+        task.clientId !== req.user!.id
+      );
+
+      console.log('📋 Filtered tasks for provider:', filteredTasks.length);
+      filteredTasks.forEach((task, index) => {
+        console.log(`  ${index + 1}. ID: ${task.id}, Title: ${task.title}, Status: ${task.status}, Category: ${task.categoryId}`);
+      });
+
+      // Convert tasks to work order format
+      const workOrders = await Promise.all(filteredTasks.map(async (task) => {
+        const client = await storage.getUser(task.clientId);
+        const category = await storage.getServiceCategory(task.categoryId);
+        
+        return {
+          id: task.id,
+          title: task.title,
+          description: task.description || '',
+          jobType: 'task',
+          budget: task.budget || null,
+          isBudgetFlexible: false,
+          estimatedDuration: task.estimatedDuration || null,
+          experienceLevel: 'any',
+          skillsRequired: '',
+          status: task.status,
+          createdAt: task.createdAt,
+          allowBidding: true,
+          category: category ? {
+            id: category.id,
+            name: category.name,
+            description: category.description,
+            icon: category.icon
+          } : null,
+          
+          // Hide sensitive info until approval
+          siteAddress: "Address will be provided after acceptance",
+          clientPhoneNumber: "Contact info provided after acceptance",
+          clientEmail: "Contact info provided after acceptance",
+          
+          // Show only city/state, not full address
+          siteCity: task.location || 'Location TBD',
+          siteState: 'State TBD',
+          
+          // Hide client personal details
+          client: {
+            firstName: "Client",
+            lastName: "Name Hidden",
+            // Don't expose personal info
+          },
+          
+          // Calculate and show approximate distance only
+          distance: null
+        };
+      }));
+
+      console.log('✅ Returning work orders:', workOrders.length);
+      res.json(workOrders);
+    } catch (error) {
+      console.error('❌ Error in available work orders endpoint:', error);
+      res.status(500).json({ message: "Failed to fetch available work orders" });
+    }
+  });
+
+  // Call center approval endpoint - Release full client details to provider
+  app.post("/api/call-center/service-requests/:requestId/approve", async (req, res) => {
+    if (!req.session || !req.session.user) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+    req.user = req.session.user;
+    
+    if (!['admin', 'call_center'].includes(req.user.role)) {
+      return res.status(403).json({ message: "Access denied. Call center staff only." });
+    }
+
+    try {
+      const requestId = parseInt(req.params.requestId);
+      const serviceRequest = await storage.getServiceRequest(requestId);
+      
+      if (!serviceRequest) {
+        return res.status(404).json({ message: "Service request not found" });
+      }
+
+      if (serviceRequest.status !== 'assigned_to_call_center') {
+        return res.status(400).json({ message: "Service request already processed" });
+      }
+
+      // Get task and provider details
+      const task = await storage.getTask(serviceRequest.taskId);
+      const provider = await storage.getServiceProvider(serviceRequest.providerId);
+      const client = await storage.getUser(serviceRequest.clientId);
+      
+      if (!task || !provider || !client) {
+        return res.status(404).json({ message: "Task, provider, or client not found" });
+      }
+
+      // Update service request status to approved
+      await storage.updateServiceRequest(requestId, {
+        status: 'approved',
+        notes: `Approved by call center staff on ${new Date().toISOString()}`
+      });
+
+      // Notify provider with FULL client details
+      const providerNotification = await storage.createNotification({
+        userId: provider.userId,
+        type: 'task_approved',
+        title: 'Task Assignment Approved - Client Details Released',
+        message: `Your task assignment for "${task.title}" has been approved. Client details: ${client.firstName} ${client.lastName}, Phone: ${client.phoneNumber || 'Not provided'}, Email: ${client.email}. Location: ${task.location || 'Location TBD'}`,
+        data: JSON.stringify({ 
+          taskId: task.id, 
+          serviceRequestId: serviceRequest.id,
+          clientId: client.id,
+          clientDetails: {
+            firstName: client.firstName,
+            lastName: client.lastName,
+            email: client.email,
+            phoneNumber: client.phoneNumber
+          }
+        })
+      });
+      
+      await sendNotificationToUser(provider.userId, providerNotification);
+
+      // Notify client about final assignment
+      const clientNotification = await storage.createNotification({
+        userId: client.id,
+        type: 'task_assigned',
+        title: 'Task Assigned',
+        message: `Your task "${task.title}" has been assigned to ${provider.user?.firstName || 'Provider'} ${provider.user?.lastName || 'Name'}. They will contact you soon to schedule the work.`,
+        data: JSON.stringify({ taskId: task.id, providerId: provider.id })
+      });
+      
+      await sendNotificationToUser(client.id, clientNotification);
+
+      res.json({ 
+        message: "Service request approved successfully. Client details released to provider.",
+        serviceRequestId: requestId,
+        taskId: task.id,
+        providerId: provider.id
+      });
+    } catch (error) {
+      console.error('Call center approval error:', error);
+      res.status(500).json({ message: "Failed to approve service request" });
+    }
+  });
+
+  // Get provider's approved service requests with full client details
+  app.get("/api/provider/approved-requests", async (req, res) => {
+    if (!req.session || !req.session.user) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+    req.user = req.session.user;
+
+    try {
+      const provider = await storage.getServiceProviderByUserId(req.user!.id);
+      if (!provider) {
+        return res.status(404).json({ message: "Provider profile not found" });
+      }
+
+      // Get all service requests for this provider
+      const serviceRequests = await storage.getServiceRequestsByProvider(provider.id);
+      
+      // Filter for approved requests and enhance with full details
+      const approvedRequests = await Promise.all(
+        serviceRequests
+          .filter(req => req.status === 'approved')
+          .map(async (request) => {
+            const task = await storage.getTask(request.taskId);
+            const client = await storage.getUser(request.clientId);
+            
+            return {
+              id: request.id,
+              status: request.status,
+              message: request.message,
+              createdAt: request.createdAt,
+              approvedAt: request.updatedAt,
+              task: task ? {
+                id: task.id,
+                title: task.title,
+                description: task.description,
+                location: task.location,
+                budget: task.budget,
+                categoryId: task.categoryId
+              } : null,
+              client: client ? {
+                id: client.id,
+                firstName: client.firstName,
+                lastName: client.lastName,
+                email: client.email,
+                phoneNumber: client.phoneNumber
+              } : null
+            };
+          })
+      );
+
+      res.json(approvedRequests);
+    } catch (error) {
+      console.error('Error fetching approved requests:', error);
+      res.status(500).json({ message: "Failed to fetch approved requests" });
+    }
+  });
+
+  // Get pending service requests for call center staff
+  app.get("/api/call-center/pending-requests", async (req, res) => {
+    if (!req.session || !req.session.user) {
+      return res.status(401).json({ message: "You must be logged in" });
+    }
+    req.user = req.session.user;
+
+    if (!['admin', 'call_center'].includes(req.user.role)) {
+      return res.status(403).json({ message: "Access denied. Call center staff only." });
+    }
+
+    try {
+      // Get all service requests with status 'assigned_to_call_center'
+      const serviceRequests = await storage.getServiceRequests();
+      const pendingRequests = serviceRequests.filter(req => req.status === 'assigned_to_call_center');
+      
+      // Enhance requests with full details
+      const enhancedRequests = await Promise.all(
+        pendingRequests.map(async (request) => {
+          const task = await storage.getTask(request.taskId);
+          const provider = await storage.getServiceProvider(request.providerId);
+          const client = await storage.getUser(request.clientId);
+          
+          // Get provider user details and category
+          const providerUser = provider ? await storage.getUser(provider.userId) : null;
+          const category = provider ? await storage.getServiceCategory(provider.categoryId) : null;
+          
+          return {
+            id: request.id,
+            status: request.status,
+            message: request.message,
+            createdAt: request.createdAt,
+            task: task ? {
+              id: task.id,
+              title: task.title,
+              description: task.description,
+              location: task.location,
+              budget: task.budget,
+              categoryId: task.categoryId,
+              createdAt: task.createdAt
+            } : null,
+            provider: provider ? {
+              id: provider.id,
+              hourlyRate: provider.hourlyRate,
+              bio: provider.bio,
+              yearsOfExperience: provider.yearsOfExperience,
+              category: category ? {
+                id: category.id,
+                name: category.name,
+                description: category.description
+              } : null,
+              user: providerUser ? {
+                id: providerUser.id,
+                firstName: providerUser.firstName,
+                lastName: providerUser.lastName,
+                email: providerUser.email,
+                phoneNumber: providerUser.phoneNumber
+              } : null
+            } : null,
+            client: client ? {
+              id: client.id,
+              firstName: client.firstName,
+              lastName: client.lastName,
+              email: client.email,
+              phoneNumber: client.phoneNumber
+            } : null
+          };
+        })
+      );
+
+      res.json(enhancedRequests);
+    } catch (error) {
+      console.error('Error fetching pending requests:', error);
+      res.status(500).json({ message: "Failed to fetch pending requests" });
+    }
+  });
+
+  // Debug endpoint to list all users
+  app.get("/api/debug/users", async (req, res) => {
+    try {
+      const allUsers = await storage.getAllUsers();
+      return res.json({
+        message: "All users in database",
+        count: allUsers.length,
+        users: allUsers.map(user => ({
+          id: user.id,
+          email: user.email,
+          username: user.username,
+          role: user.role,
+          hasPassword: !!user.password,
+          passwordLength: user.password?.length
+        }))
+      });
+    } catch (error) {
+      console.error('Error listing users:', error);
+      res.status(500).json({ message: "Error listing users" });
     }
   });
 
